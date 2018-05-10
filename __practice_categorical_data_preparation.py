@@ -31,7 +31,7 @@ with conn:
 orig = np.array(pd.DataFrame(data[:50]))
 X = np.array(pd.DataFrame(data))
 #%%
-# transform categorical strings into numerical values
+# transform categorical strings into numerical values -> playerPositionCode
 labelencoder_X = LabelEncoder()
 X[:,1] = labelencoder_X.fit_transform(X[:,1])
 

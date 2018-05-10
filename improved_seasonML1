@@ -1,7 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue May  8 21:16:08 2018
+The first half hour of my ML course informed me that I was making a couple
+obvious mistakes when preparing seasonML1.
+
+1. I did not treat categorical data correctly (not a problem in the
+   production implementation of the algorithm, but it would have been
+   if I had included any categorical data!)
+2. Player ID should not be included as a data point in the model or for
+   prediction. Ideally, it would come through the flow with the data somehow...
+
+Does including Player ID affect the prediction? Negatively or Positively?
+Let's find out!
+
+... multiple runs of each showed negligible difference. Meh.
 
 @author: Galloway
 """
@@ -79,7 +91,7 @@ def extractlag(player, stat4lag, lag ):
         cur = conn.cursor()
 
         # Notice that the stats extracted are hard-coded...
-        cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed, playerId \
+        cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed \
                     FROM s_skater_summary \
                     WHERE seasonId NOT IN (20172018) \
                     AND playerId=?", [player])
@@ -92,13 +104,13 @@ def extractlag(player, stat4lag, lag ):
         df = pd.DataFrame(data)
 
         # name the columns of df
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'id')
+        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
         # ensure the results are sorted by year, latest at the top:
         df = df.sort_values(['year'],ascending = False) # this step was not necessary for seasonML1 - results were already sorted!
         # create a dataframe of shifted values - these are lagged w.r.t. the original dataframe
         dfshift = df.shift(lag)
         # name the columns of the shifted df
-        dfshift.columns = ('yearlag', 'pointslag', 'goalslag', 'ppPointslag', 'shotslag', 'timeOnIcePerGamelag', 'assistslag', 'gameslag', 'idlag')
+        dfshift.columns = ('yearlag', 'pointslag', 'goalslag', 'ppPointslag', 'shotslag', 'timeOnIcePerGamelag', 'assistslag', 'gameslag')
 
         # find the index of the column desired for lagging
         columnindex = df.columns.get_loc(stat4lag)
@@ -118,7 +130,7 @@ def extractlag(player, stat4lag, lag ):
         # convert to a Dataframe
         df = pd.DataFrame(temp)
         # name these columns to match typical output
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'id','pointslag')
+        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games','pointslag')
         
         #return df
         return np.array(df)
@@ -179,13 +191,13 @@ print(lagged1.shape,lagged2.shape,lagged3.shape)
 
 # Convert these arrays into dataframes for convenience later...
 lagged1 = pd.DataFrame(lagged1)
-lagged1.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'id','pointslag')
+lagged1.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
 
 lagged2 = pd.DataFrame(lagged2)
-lagged2.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'id','pointslag')
+lagged2.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
 
 lagged3 = pd.DataFrame(lagged3)
-lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'id','pointslag')
+lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
 
 # Lagged arrays ARE OF SAME SIZE as seasonML1
         
@@ -301,8 +313,8 @@ model = Sequential()
 # Inform algorithm that -1 represents non-values
 model.add(Masking(mask_value=-1, input_shape=(train_ind.shape[1], train_ind.shape[2])))
 
-# Define as LSTM with 9 neurons - not optimized - use 9 because I have 9 statistical categories
-model.add(LSTM(9))
+# Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
+model.add(LSTM(8))
 
 # I'm not even sure why I need this part, but it doesn't work without it...
 model.add(Dense(train_ind.shape[1]))
@@ -371,8 +383,6 @@ rmselag3 = np.sqrt(mean_squared_error(inv_predicted_resp[:,2], actual_resp[:,2])
 print('Lag3 RMSE: %.3f' % rmselag3)
 
 # These RMSEs check out. GREAT SUCCESS!
-
-
 
 #%% What about an alternate calculation of error:
 
