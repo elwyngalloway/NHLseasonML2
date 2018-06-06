@@ -32,7 +32,7 @@ from keras.layers import LSTM
 from keras.layers import Masking
 
 # there's some weird stuff going on here with matplotlib..
-matplotlib.use('Qt5Agg')   # generate postscript output by default
+#matplotlib.use('Qt5Agg')   # generate postscript output by default
 import matplotlib
 
 
@@ -63,58 +63,6 @@ players = np.unique(data)
 print(players.shape[0], "players identified")
 
 # Returns 301 players, AND THIS AGREES with seasonML1
-#%% Some ideas to apply scaling to a 3D array - this allows consolidation
-# into a 3D array much sooner.
-# this cell should not be run as it won't work as part of the flow...
-
-# assume a 3D array has already been created as in the cell titled:
-# "Combine three lags into a single 3D array:"
-
-#test_orig_shape = test.shape # record the original shape of the 3D array
-
-# First, we can reshape the 3D array into 2D, but keep the right data
-# in the right place
-#test.reshape(-1, test_orig_shape[2])
-
-# Calculating the scaler:
-#scaler.fit(test.reshape(-1,test_orig_shape[2]))
-
-# Applying the scaler to a 2D array is like this:
-#scaler.transform(test.reshape(-1,test_orig_shape[2]))
-
-# Transforming the 2D array back to 3D:
-#test.reshape(-1,test_orig_shape[2]).reshape(test_orig_shape)
-
-# Now, put it all together: reshape -> scale -> shape back
-#scaler.transform(test.reshape(-1,test_orig_shape[2])).reshape(test_orig_shape)
-
-
-
-
-# Nice! To summarize, the following lines would allow one to design and
-# apply a scaler to a 3D array:
-
-#test_orig_shape = test.shape # record the original shape of the 3D array
-
-#scaler = scaler.fit(test.reshape(-1,test_orig_shape[2]))
-
-#test_scaled = scaler.transform(test.reshape(-1, test_orig_shape[2])).reshape(test_orig_shape)
-
-#test_invert = scaler.inverse_transform(test_scaled.reshape(-1, test_orig_shape[2])).reshape(test_orig_shape)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #%% Define a function
 
@@ -251,15 +199,6 @@ lagged2.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePer
 lagged3 = pd.DataFrame(lagged3)
 lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
 
-# Lagged arrays ARE OF SAME SIZE as seasonML1
-        
-#%% Perform some preprocessing
-
-# Tell the function that you want to scale each column's values to be between 0 and 1:
-scaler = MinMaxScaler(feature_range=(0, 1))
-
-# Fit the scaler to the input data:
-scaler = scaler.fit(lagged1.values)
 
 #%% Separate training from target data
 
@@ -283,64 +222,34 @@ print(lagged3.shape,lag3predictfrom.shape,lag3model.shape)
 
 # The array sizes ARE THE SAME as they were for seasonML1!
 
-#%% Scale the data:
 
-lag1predictfrom = scaler.transform(lag1predictfrom)
-lag2predictfrom = scaler.transform(lag2predictfrom)
-lag3predictfrom = scaler.transform(lag3predictfrom)
+#%% updated flow here... let's amalgamate the lags into a single array
 
-lag1model = scaler.transform(lag1model)
-lag2model = scaler.transform(lag2model)
-lag3model = scaler.transform(lag3model)
+# This array contains all data needed test and train the model
+modelfrom = np.transpose(np.dstack((np.array(lag1model) , np.array(lag2model) , np.array(lag3model))) , (0,2,1))
 
-#%% Split into train and test sets:
-
-lag1train, lag1test, lag2train, lag2test, lag3train, lag3test = train_test_split(lag1model, lag2model, lag3model, test_size=0.1) # isolating 10% of data
-
-print("Shape of lag1train:", lag1train.shape)
-
-# The shape IS THE SAME as seasonML1!
-
-#%% Combine three lags into a single 3D array:
-
-# First, for the training data
-# define the dimensions of the desired array:
-dim1 = lag1train.shape[0]
-dim2 = 3
-dim3 = lag1train.shape[1]
-
-# initialize the training array
-train = np.zeros((dim1, dim2, dim3)) - 1 # set the default value to -1. ML algo can know -1 is to be ignored
-
-# populate the training array
-train[:lag1train.shape[0],0,:] = lag1train
-train[:lag2train.shape[0],1,:] = lag2train
-train[:lag3train.shape[0],2,:] = lag3train
+# This array is the one that will be predicted from:
+predictfrom = np.transpose(np.dstack((np.array(lag1predictfrom) , np.array(lag2predictfrom) , np.array(lag3predictfrom))) , (0,2,1))
 
 
-# Now, for the test data
-dim1 = lag1test.shape[0]
-dim2 = 3
-dim3 = lag1test.shape[1]
+#  Apply the 3D scaler:
 
-test = np.zeros((dim1, dim2, dim3)) - 1
+scaler = MinMaxScaler(feature_range=(0, 1))
 
-test[:lag1test.shape[0],0,:] = lag1test
-test[:lag2test.shape[0],1,:] = lag2test
-test[:lag3test.shape[0],2,:] = lag3test
+# Design the scaler:
+scaler = scaler.fit(modelfrom.reshape(-1,modelfrom.shape[2]))
 
-# Finally, for the prediction dataset
-dim1 = lag1predictfrom.shape[0]
-dim2 = 3
-dim3 = lag1predictfrom.shape[1]
+# Apply the scaler:
+modelfrom_scaled = scaler.transform(modelfrom.reshape(-1, modelfrom.shape[2])).reshape(modelfrom.shape)
+predictfrom_scaled = scaler.transform(predictfrom.reshape(-1, predictfrom.shape[2])).reshape(predictfrom.shape)
 
-predictfrom = np.zeros((dim1, dim2, dim3)) - 1 
 
-predictfrom[:lag1predictfrom.shape[0],0,:] = lag1predictfrom
-predictfrom[:lag2predictfrom.shape[0],1,:] = lag2predictfrom
-predictfrom[:lag3predictfrom.shape[0],2,:] = lag3predictfrom
 
-#%% Split into independant and responding variables:
+# Split into test and training sets:
+train, test = train_test_split(modelfrom_scaled,test_size=0.1)
+
+
+# Split into independant and responding variables:
 
 # Split the training data into independant and responding variables:
 train_ind, train_resp = train[:,:,:-1], train[:,:,-1]
@@ -349,7 +258,7 @@ train_ind, train_resp = train[:,:,:-1], train[:,:,-1]
 test_ind, test_resp = test[:,:,:-1], test[:,:,-1]
 
 # Split prediction data:
-predictfrom_ind, predictfrom_resp = predictfrom[:,:,:-1], predictfrom[:,:,-1]
+predictfrom_ind, predictfrom_resp = predictfrom_scaled[:,:,:-1], predictfrom_scaled[:,:,-1]
 
 print("Shape of the array used for prediction:", predictfrom_ind.shape)
 
@@ -407,21 +316,16 @@ predicted_resp = np.expand_dims(predicted_resp,axis=2)
 # Add the predicted values to the independent variables used for the prediction
 inv_predicted = np.concatenate((predictfrom_ind[:,:,:],predicted_resp), axis=2)
 
-# Invert the 3D array one lag at a time
-for i in range(inv_predicted.shape[1]):
-    inv_predicted[:,i,:] = scaler.inverse_transform(inv_predicted[:,i,:])
-results1 = inv_predicted[:,:,:]
+inv_predicted = scaler.inverse_transform(inv_predicted.reshape(-1, inv_predicted.shape[2])).reshape(inv_predicted.shape)
 
 # Isolate the predicted values
 inv_predicted_resp = inv_predicted[:,:,-1]
 
 
 # Now, invert scaling for predictfrom
-inv_predictfrom = np.empty_like(predictfrom)
-for i in range(predictfrom.shape[1]):
-    inv_predictfrom[:,i,:] = scaler.inverse_transform(predictfrom[:,i,:])
-actual_resp = inv_predictfrom[:,:,-1]
+inv_predictfrom = scaler.inverse_transform(predictfrom_scaled.reshape(-1, predictfrom_scaled.shape[2])).reshape(predictfrom_scaled.shape)
 
+actual_resp = inv_predictfrom[:,:,-1]
 #%% Evaluate performance:
 
 # calculate RMSE
