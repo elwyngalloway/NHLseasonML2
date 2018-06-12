@@ -4,6 +4,7 @@ Evolution of NHLseasonML...
 ### Some thoughts and ideas about where this project might explore to build on the "success" of ML1:
 * #### Re-write the code to be more "harnessable" - something that can easily built into a script and run multiple times with different hyper-/parameters.
 ** The database queries are still hard-coded
+
 ** After the data is pulled, the remaining steps should be harnessable
 * #### Use some more/different data - include position, age and draft position information, for example.
 * #### Include player ID as categorical data? I don't think this makes sense!
