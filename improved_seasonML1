@@ -237,6 +237,21 @@ predictfrom = np.transpose(np.dstack((np.array(lag1predictfrom) , np.array(lag2p
 scaler = MinMaxScaler(feature_range=(0, 1))
 
 # Design the scaler:
+# (this flattens the 3D array into 2D, applies determines scaler, then re-stacks in 3D)
+"""
+Another issue about this scaling step... each lagged array contains values of -1
+when there is no data to include. LSTM can be instructed to ignore values of -1,
+but I haven't figured out how to make the scaler ignore them! The scaler modifies
+the -1s. My solution is to ASSUME -1 IS THE MINIMUM VALUE IN THE COLUMN, which
+will means they will be scaled to 0. I then subtract 1 from a masked version
+of the array to return those values to -1.
+
+Still... can I just tell the LSTM to ignore 0s instead of -1s?
+If the other values in a column are between 0.90 and 1.0, is the outcome affected?
+
+You know what, I'm just ignoring all this for now and using 0s to tell LSTM
+which data points to ignore.
+"""
 scaler = scaler.fit(modelfrom.reshape(-1,modelfrom.shape[2]))
 
 # Apply the scaler:
@@ -271,8 +286,8 @@ print("Shape of the array used for prediction:", predictfrom_ind.shape)
 # Define the network using the Sequential Keras API
 model = Sequential()
 
-# Inform algorithm that -1 represents non-values
-model.add(Masking(mask_value=-1, input_shape=(train_ind.shape[1], train_ind.shape[2])))
+# Inform algorithm that 0 represents non-values (values of -1 were scaled to 0!)
+model.add(Masking(mask_value=0, input_shape=(train_ind.shape[1], train_ind.shape[2])))
 
 # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
 model.add(LSTM(8))
