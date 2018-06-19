@@ -28,7 +28,9 @@ with conn:
 
         data = cur.fetchall()
         
-orig = np.array(pd.DataFrame(data[:50]))
+orig = pd.DataFrame(data[:50])
+orig.columns = ('year', 'playerPositionCode', 'assists','goals', 'gamesplayed', 'playerId')
+
 X = np.array(pd.DataFrame(data))
 #%%
 # transform categorical strings into numerical values -> playerPositionCode
@@ -51,7 +53,14 @@ else:
     print('everything is as expected!')
     
     
-#%%
+#%% Could I do the OneHot encoding in a dataframe? Yes.
+    
+# append columns for each position
+orig = pd.concat([orig,pd.get_dummies(orig['playerPositionCode'], prefix='position')],axis=1)
+# drop original position column
+orig.drop(['playerPositionCode'],axis=1, inplace=True)
+
+
 
 
 
