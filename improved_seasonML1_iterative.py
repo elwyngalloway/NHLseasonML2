@@ -286,8 +286,16 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=120, batch_size=50, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
+    # plot history
+    plt.plot(history.history['loss'], label='train')
+    plt.plot(history.history['val_loss'], label='test')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show()
+    
     # Make a prediction:    
     predicted_resp = model.predict(predictfrom_ind)
     
@@ -351,7 +359,7 @@ meanresult = np.zeros((result.shape[0],result.shape[2]))
 
 for iteration in range(result.shape[2]):
     for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],1).mask])
+        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
     
     RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
 
@@ -366,7 +374,7 @@ error = np.mean(RMSEmeans)
 
 print("Overall error: " + str(error))
 
-np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo120_batch50.npy',result)
+#np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo64_batch25.npy',result)
 
 
 

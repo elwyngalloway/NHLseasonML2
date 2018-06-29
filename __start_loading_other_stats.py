@@ -103,7 +103,8 @@ def extractlag(player, stat4lag, lag ):
                     INNER JOIN s_bio_info \
                         ON s_bio_info.playerId = s_skater_summary.playerId \
                         AND s_bio_info.seasonId = s_skater_summary.seasonId \
-                    WHERE s_skater_summary.playerID = ?", [player])
+                    WHERE s_skater_summary.playerID = ? \
+                    AND s_skater_summary.seasonId NOT IN (20172018)", [player])
         
         
 
@@ -329,7 +330,15 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=128, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+
+    # plot history
+    plt.plot(history.history['loss'], label='train')
+    plt.plot(history.history['val_loss'], label='test')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show()
 
     # Make a prediction:    
     predicted_resp = model.predict(predictfrom_ind)
@@ -365,7 +374,7 @@ for i in range(numiters):
     else:
         result = np.concatenate((result,np.expand_dims(modelrun(modelarrayfrom, predictarrayfrom), axis=2)),axis=2)
         
-    
+ #%%   
 
 # Evaluate performance:
 
@@ -373,7 +382,7 @@ for i in range(numiters):
 actual = predictarrayfrom[:,0,-1]
 
 # Find the mask
-resultmask = np.ma.masked_less(result,1).mask
+resultmask = np.ma.masked_less(result,2).mask
 
 # result.shape = [player, lag, iteration]
 
@@ -394,7 +403,7 @@ meanresult = np.zeros((result.shape[0],result.shape[2]))
 
 for iteration in range(result.shape[2]):
     for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],1).mask])
+        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
     
     RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
 
@@ -409,6 +418,22 @@ error = np.mean(RMSEmeans)
 
 print("Overall error: " + str(error))
 
-np.save('./results/LAG3_POINTS50/plus_stats/LSTM15-MSE_ADAM-epo128_batch25.npy',result)
+#np.save('./results/LAG3_POINTS50/plus_stats/LSTM15-MSE_ADAM-epo128_batch25.npy',result)
 
-# something's up with the error... rookie points are still being forecast for years not played
+# something's up with the error... rookie points are still being forecast for years not played...
+# actually, that's expected! They are still forecast, but we want to ignore them during
+# error calculations. I adjusted the threshold for the mask to 2, and that should make a difference.
+#%% Plot some results like this:
+
+fig1 = plt.figure(figsize=(5,5))
+az = fig1.add_subplot(1,1,1)
+az.scatter(actual,np.mean(meanresult, axis=1),c="b")
+#az.scatter(actual_resp[:,1],inv_predicted_resp[:,1],c="r")
+#az.scatter(actual_resp[:,2],inv_predicted_resp[:,2],c="g")
+az.plot([0,50,120],[0,50,120])
+plt.ylim(-10,120)
+plt.xlim(-10,120)
+plt.xlabel('Actual Results')
+plt.ylabel('Predicted Results')
+plt.title('Actual vs. Predicted', fontsize=16)
+plt.grid(True)
