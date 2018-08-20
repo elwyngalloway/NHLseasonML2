@@ -276,6 +276,13 @@ def modelrun(modelfrom, predictfrom):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
+    # Returning sequnces allows me to add "hidden" LSTM layers
+    model.add(LSTM(8, return_sequences=True))
+    model.add(LSTM(8, return_sequences=True))
+    model.add(LSTM(8, return_sequences=True))
+    model.add(LSTM(8, return_sequences=True))
+    model.add(LSTM(8, return_sequences=True))
+    model.add(LSTM(8, return_sequences=True))
     model.add(LSTM(8))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
@@ -286,9 +293,9 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=35, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
-    # plot history
+    # plot history    
     plt.plot(history.history['loss'], label='train')
     plt.plot(history.history['val_loss'], label='test')
     plt.xlabel('Epoch')
@@ -378,9 +385,12 @@ print("Overall error: " + str(error))
 
 #np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo64_batch25.npy',result)
 
+
+
+
 #%%
-fig1 = plt.figure(figsize=(5,5))
-az = fig1.add_subplot(1,1,1)
+fig4 = plt.figure(figsize=(5,5))
+az = fig4.add_subplot(1,1,1)
 az.scatter(actual,np.mean(meanresult, axis=1),c="b")
 #az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
 #az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
@@ -392,8 +402,6 @@ plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
 plt.title('Actual vs. Predicted', fontsize=16)
 plt.grid(True)
-
-
 
 
 

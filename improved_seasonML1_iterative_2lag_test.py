@@ -122,7 +122,7 @@ def extractlag(player, stat4lag, lag ):
 #%% Use function to extract stats for players identified
 
 if 'lagged1' in locals():
-    del(lagged1, lagged2, lagged3)
+    del(lagged1, lagged2)
         
 for player in players:
     
@@ -155,24 +155,9 @@ for player in players:
         else:
             lagged2 = interim[:,:]
 
-        
-        # Now the third lag
-        interim = np.zeros_like(interim1) - 999
-
-        interim3 = extractlag(int(player), 'points', 3)
-        np.array(pd.DataFrame(interim3).dropna(inplace=True))
-
-        interim[:interim3.shape[0],:] = interim3
-
-        if 'lagged3' in locals():
-            lagged3 = np.append(lagged3, interim, axis=0)
-
-        else:
-            lagged3 = interim[:,:]
-
 
 # Check that the shapes of the three arrays are identical:
-print(lagged1.shape,lagged2.shape,lagged3.shape)
+print(lagged1.shape,lagged2.shape)
 
 # Convert these arrays into dataframes for convenience later...
 lagged1 = pd.DataFrame(lagged1)
@@ -180,9 +165,6 @@ lagged1.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePer
 
 lagged2 = pd.DataFrame(lagged2)
 lagged2.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
-
-lagged3 = pd.DataFrame(lagged3)
-lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
 
 
 #%% Separate training from target data
@@ -197,20 +179,15 @@ lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interes
 # model from the remaining seasons
 lag2model = lagged2.loc[lagged1['year'] != 20152016]
 
-lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
-lag3model = lagged3.loc[lagged1['year'] != 20152016]
-
 
 
 # This array contains all data needed test and train the model
 modelarrrayfrom = np.transpose(np.dstack((np.array(lag1model),
-                                    np.array(lag2model),
-                                    np.array(lag3model))), (0,2,1))
+                                    np.array(lag2model))), (0,2,1))
 
 # This array is the one that will be predicted from:
 predictarrayfrom = np.transpose(np.dstack((np.array(lag1predictfrom),
-                                      np.array(lag2predictfrom),
-                                      np.array(lag3predictfrom))), (0,2,1))
+                                      np.array(lag2predictfrom))), (0,2,1))
 
 
 #%% Let's harness things from here on. Define a function that separates the
@@ -286,7 +263,7 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=20, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
     # plot history
     plt.plot(history.history['loss'], label='train')
@@ -322,7 +299,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 #del(result)
-numiters = 15
+numiters = 7
 fig = plt.figure(figsize=(5,5))
 plt.clf()
 for i in range(numiters):
@@ -382,15 +359,15 @@ print("Overall error: " + str(error))
 fig1 = plt.figure(figsize=(5,5))
 az = fig1.add_subplot(1,1,1)
 az.scatter(actual,np.mean(meanresult, axis=1),c="b")
-#az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
-#az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
+az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="g", s=12)
+az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
 #az.scatter(actual[~resultmask[:,2,0]],np.mean(result[:,2,:][~resultmask[:,2,0]], axis=1),c="g", s=12)
 az.plot([0,50,120],[0,50,120])
 plt.ylim(-10,120)
 plt.xlim(-10,120)
 plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
-plt.title('Actual vs. Predicted', fontsize=16)
+plt.title('Lag2', fontsize=16)
 plt.grid(True)
 
 

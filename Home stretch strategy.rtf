@@ -1,0 +1,62 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1504\cocoasubrtf830
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 Strategy: The home stretch to 2018 Draft.\
+\
+Still time for some also improvement, but not a ton. What are some of the big questions I still have?\
+\
+1. Can I predict more than one stat at a time?\
+2. Am I implementing time steps correctly?\
+3. Can I improve predictions by selecting different hyperparameters?\
+4. Can I improve predictions by adding hidden LSTM layers?\
+5. Does using different sets of stats improve predictions?\
+6. Do more lags improve predictions?\
+\
+\
+Still lots here. Hmmm\'85\
+\
+Well, if I\'92m not implementing time steps correctly, I need to fix that first \'97 it\'92s foundational. So:\
+\
+
+\b STEP 1 
+\b0 - Verify time steps are implemented correctly.\
+	Okay, I think this is still right.\
+\
+Next, nailing down the number of lags to use is a good idea: if the number can be reduced, it should expedite the steps that follow, so:\
+\
+
+\b STEP 2
+\b0  - Determine the ideal number of lags to use.\
+	I ran 7 iterations of 1,2,3,4 lags. It looked like 3 was best. Saved an image of a plot.\
+	\
+\
+Most of the remaining steps are around improving the results. Which offer the most potential to influence the prediction results? Are some easier to test than others? I already have an alternate set of stats coded, so that seems like a straight forward test. Testing stat-by-stat is not nearly as easy, however. Hyperparameter testing is pretty straight forward, but it would be time consuming. I\'92ve tested adding LSTM hidden layers: it\'92s easy to implement into an existing algorithm, and it has shown promise for incremental improvement. So:\
+\
+
+\b STEP 3
+\b0  - Hyperparameter testing may demonstrate the minimum number of iterations that must be made for reasonable results, which will allow optimal run times for later tests.
+\b \
+\
+STEP 4
+\b0  - Test improvement of adding hidden LSTM layers.
+\b \
+\
+STEP 5
+\b0  - Trial new set of input stats.\
+\
+The last step seems like the biggest hill to climb. Getting there would be phenomenal, but there is a work-around (run predictions on individual stats), and the previous steps would still need to be done. So:\
+\
+
+\b STEP 6
+\b0  - Create algorithm to predict multiple steps at once.\
+\
+\
+Okay, but these aren\'92t the things left to accomplish. DRAFT TOOLS! To date, the excel sheets have worked quite well in-draft. However, if the new player forecast data may not be easily visualized in Excel. So: modify Excel tools to handle new information? Or develop new tools in Python for in-draft data visualization? If we go the Excel route, the stochastic forecast information may have to be summarized before moving into Excel. We\'92ll see.\
+\
+
+\b \
+ }
