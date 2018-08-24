@@ -22,6 +22,8 @@ from keras.layers import Masking
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 
+import datetime
+
 
 #%%
 db_name = "NHLseasonML_seasonstats.db"
@@ -387,14 +389,15 @@ def hpsearch(modelfrom, predictfrom, modeliter, nrons, epch, bsize):
 #%% Test the hyperparameters:
 
 # List the HPs to test
-neuronlist = [4,6,8,12,16]
-epochlist = [15,20,30,50]
-batchlist = [5,10,25,50]
+neuronlist = [8,12,16]
+epochlist = [25,35]
+batchlist = [10,15] 
     
+print("Start time:",datetime.datetime.time(datetime.datetime.now()))
 
-result = hpsearch(modelarrrayfrom, predictarrayfrom, 10, neuronlist, epochlist, batchlist)
+result = hpsearch(modelarrrayfrom, predictarrayfrom, 7, neuronlist, epochlist, batchlist)
         
-        
+print("End time:",datetime.datetime.time(datetime.datetime.now()))     
         
 
 
@@ -407,10 +410,14 @@ ax = plt.axes(projection='3d')
 xdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(neuronlist,1),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
 ydata = np.ndarray.flatten(np.expand_dims(np.expand_dims(epochlist,0),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
 zdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(batchlist,0),0)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
-im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), cmap='Greens');
+im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), cmap='viridis', s=1000*(17-np.ndarray.flatten(result)))
 # Add a colorbar
 fig.colorbar(im, ax=ax)
 
+ax.set_xlabel('Neurons')
+ax.set_ylabel('Epochs')
+ax.set_zlabel('Batch')
 
 
-
+b = np.load('HPtestONE.npy')
+im = ax.scatter3D(b[:,0], ydata[:,1], zdata[:,2], c=b[:,3], cmap='viridis', s=1000*(17-b[:,3]))
