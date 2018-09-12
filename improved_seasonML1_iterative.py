@@ -20,6 +20,9 @@ from keras.layers import LSTM
 from keras.layers import Masking
 
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
+
+import datetime
 
 
 #%%
@@ -217,7 +220,7 @@ predictarrayfrom = np.transpose(np.dstack((np.array(lag1predictfrom),
 #   data into training and testing sets; trains the model; predicts; evaluates
 #   prediction quality
 
-def modelrun(modelfrom, predictfrom):
+def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     
     """
     
@@ -275,8 +278,8 @@ def modelrun(modelfrom, predictfrom):
     # Inform algorithm that 0 represents non-values (values of -1 were scaled to 0!)
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
-    # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
-    model.add(LSTM(8))
+    # Define as LSTM with neurons
+    model.add(LSTM(nrons))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
     model.add(Dense(train_ind.shape[1]))
@@ -286,15 +289,15 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=epchs, batch_size=bsize, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
     # plot history
-    plt.plot(history.history['loss'], label='train')
-    plt.plot(history.history['val_loss'], label='test')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
+#    plt.plot(history.history['loss'], label='train')
+#    plt.plot(history.history['val_loss'], label='test')
+#    plt.xlabel('Epoch')
+#    plt.ylabel('Loss')
+#    plt.legend()
+#    plt.show()
     
     # Make a prediction:    
     predicted_resp = model.predict(predictfrom_ind)
@@ -320,81 +323,100 @@ def modelrun(modelfrom, predictfrom):
     # Return results (predicted responding variables):
     return inv_predicted_resp
 
-#%% Run iterations:
-#del(result)
-numiters = 15
-fig = plt.figure(figsize=(5,5))
-plt.clf()
-for i in range(numiters):
-    print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
-    if i == 0:
-        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom), axis=2)
-    else:
-        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom), axis=2)),axis=2)
-        
-    
+##%% Run iterations:
+##del(result)
+#numiters = 15
+##fig = plt.figure(figsize=(5,5))
+##plt.clf()
+#for i in range(numiters):
+#    print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
+#    if i == 0:
+#        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)
+#    else:
+#        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
+#        
+#    
+#%% To search for hyperparameters
 
-#%% Evaluate performance:
-
-# Retrieve the responding variables for predictarrayfrom
+# define some things to evaluate results:
+        # Retrieve the responding variables for predictarrayfrom
 actual = predictarrayfrom[:,0,-1]
-
 # Find the mask
-resultmask = np.ma.masked_less(result,1).mask
-
-# result.shape = [player, lag, iteration]
-
-# Create an empty array for the RMSE results
-# The first dimension is the lag, and the second is the run realization
-RMSEs = np.empty((result.shape[1],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for lag in range(result.shape[1]):
-        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
+#resultmask = np.ma.masked_less(result,1).mask
 
 
-# Create an alternate measure of error: use mean of the lags for each player
-# as the prediction. Calculate the RMSE of these means.         
-RMSEmeans =np.empty((result.shape[2]))
 
-meanresult = np.zeros((result.shape[0],result.shape[2]))
 
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
+def hpsearch(modelfrom, predictfrom, modeliter, nrons, epch, bsize):
     
-    RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
+    """
+    nrons, epch,bsize are expected to be lists
+    """
+    
+    # Define the result array to be populated
+    HPmap = np.empty((len(nrons), len(epch), len(bsize)))
+    
+    print("Tough to estimate total run time, but working on __ /__ neuron tests")
+    
+    for N in nrons:
+        print(nrons.index(N)+1,"/",len(nrons))
+        for E in epch:
+            for B in bsize:
+                for i in range(modeliter):
+                    if i == 0:
+                        iterresult = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, N, E, B), axis=2)
+                    else:
+                        iterresult = np.concatenate((iterresult,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, N, E, B), axis=2)),axis=2)
+                        
+                # Determine the error for these iterations
+                RMSEmeans =np.empty((iterresult.shape[2]))
+                
+                meanresult = np.zeros((iterresult.shape[0],iterresult.shape[2]))
+                
+                for iteration in range(iterresult.shape[2]):
+                    for player in range(iterresult.shape[0]):
+                        meanresult[player,iteration] = np.mean(iterresult[player,:,iteration][np.ma.masked_greater(iterresult[player,:,iteration],2).mask])
+                    
+                    RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
+                
+                del iterresult
+                
+                HPmap[nrons.index(N), epch.index(E), bsize.index(B)] = np.mean(RMSEmeans)
+                
+                
+    return HPmap
 
-# For convenience, capture these errors in a single array. First columns are
-# the RMSEs for each lag, followed by the mean of errors for all lags,
-# then the error of the mean estimates for all lags.
-RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
+#%% Test the hyperparameters:
 
-# For now, I think the best representation of the error is the RMSE for
-# the mean of the the lag estimates. Report this as error.
-error = np.mean(RMSEmeans)
+# List the HPs to test
+neuronlist = [4,6,8,12,16]
+epochlist = [15,20,30,50]
+batchlist = [5,10,25,50]
+    
+print("Start time:",datetime.datetime.time(datetime.datetime.now()))
 
-print("Overall error: " + str(error))
+result = hpsearch(modelarrrayfrom, predictarrayfrom, 10, neuronlist, epochlist, batchlist)
+        
+print("Start time:",datetime.datetime.time(datetime.datetime.now()))        
+        
+np.save('HPsearch.npy',result)
 
-#np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo64_batch25.npy',result)
+#%% Plot HP testing results in 3D
 
-#%%
-fig1 = plt.figure(figsize=(5,5))
-az = fig1.add_subplot(1,1,1)
-az.scatter(actual,np.mean(meanresult, axis=1),c="b")
-#az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
-#az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
-#az.scatter(actual[~resultmask[:,2,0]],np.mean(result[:,2,:][~resultmask[:,2,0]], axis=1),c="g", s=12)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-10,120)
-plt.xlim(-10,120)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Actual vs. Predicted', fontsize=16)
-plt.grid(True)
+fig, ax = plt.subplots()
+ax = plt.axes(projection='3d')
 
-
-
+# Data for three-dimensional scattered points
+xdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(neuronlist,1),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
+ydata = np.ndarray.flatten(np.expand_dims(np.expand_dims(epochlist,0),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
+zdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(batchlist,0),0)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
+im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), vmin=15.5, vmax=16.75, cmap='viridis_r', s=1000*(16.75-np.ndarray.flatten(result)));
+# Add a colorbar
+cbar = fig.colorbar(im, ax=ax)
+cbar.set_label('Error')
+ax.set_xlabel('Neurons')
+ax.set_ylabel('Epochs')
+ax.set_zlabel('Batch')
 
 
 
