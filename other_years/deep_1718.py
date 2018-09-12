@@ -20,7 +20,9 @@ from keras.layers import LSTM
 from keras.layers import Masking
 
 import matplotlib.pyplot as plt
-from scipy import stats
+from mpl_toolkits import mplot3d
+
+import datetime
 
 
 #%%
@@ -36,7 +38,8 @@ with conn:
     # SQLite statement to retreive the data in question (forwards who have
     # scored more than 50 points in a season):
     cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 50 \
-                AND playerPositionCode IN ('C', 'F', 'L', 'R')") # I usually use points > 50
+                AND playerPositionCode IN ('C', 'F', 'L', 'R') \
+                AND seasonID NOT IN (20182019)")
     
     # Put selected playerIds in an array (playerId is a unique identifier)
     data = np.array(cur.fetchall())
@@ -78,7 +81,8 @@ def extractlag(player, stat4lag, lag ):
         # Notice that the stats extracted are hard-coded...
         cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed \
                     FROM s_skater_summary \
-                    WHERE playerId=?", [player])
+                    WHERE seasonId NOT IN (20182019) \
+                    AND playerId=?", [player])
 
         data = cur.fetchall()
     
@@ -114,7 +118,7 @@ def extractlag(player, stat4lag, lag ):
         # convert to a Dataframe
         df = pd.DataFrame(temp)
         # name these columns to match typical output
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games','pointslag')
+        df.columns = ('year', 'player', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games','pointslag')
         
         #return df
         return np.array(df)
@@ -187,30 +191,17 @@ lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePer
 #%% Separate training from target data
 
 # predict from the 20152016 season (lag = 1)
-lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
+lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
 # model from the remaining seasons
-lag1model = lagged1.loc[lagged1['year'] != 20152016]
+lag1model = lagged1.loc[lagged1['year'] != 20162017]
 
 # predict from the 20142015 season (lag = 2)
-lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
+lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
 # model from the remaining seasons
-lag2model = lagged2.loc[lagged1['year'] != 20152016]
+lag2model = lagged2.loc[lagged1['year'] != 20162017]
 
-lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
-lag3model = lagged3.loc[lagged1['year'] != 20152016]
-
-## predict from the 20162017 season (lag = 1)
-#lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
-## model from the remaining seasons
-#lag1model = lagged1.loc[lagged1['year'] != 20162017]
-#
-## predict from the 20152016 season (lag = 2)
-#lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
-## model from the remaining seasons
-#lag2model = lagged2.loc[lagged1['year'] != 20162017]
-#
-#lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
-#lag3model = lagged3.loc[lagged1['year'] != 20162017]
+lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
+lag3model = lagged3.loc[lagged1['year'] != 20162017]
 
 
 
@@ -229,7 +220,7 @@ predictarrayfrom = np.transpose(np.dstack((np.array(lag1predictfrom),
 #   data into training and testing sets; trains the model; predicts; evaluates
 #   prediction quality
 
-def modelrun(modelfrom, predictfrom):
+def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     
     """
     
@@ -287,13 +278,10 @@ def modelrun(modelfrom, predictfrom):
     # Inform algorithm that 0 represents non-values (values of -1 were scaled to 0!)
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
-    # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
-    # Returning sequnces allows me to add "hidden" LSTM layers
-
-    model.add(LSTM(6, return_sequences=True))
-    model.add(LSTM(6, return_sequences=True))
-    model.add(LSTM(6, return_sequences=True))
-    model.add(LSTM(6))
+    # Define as LSTM with neurons
+    #model.add(LSTM(nrons, return_sequences=True))
+    model.add(LSTM(nrons, return_sequences=True))
+    model.add(LSTM(nrons))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
     model.add(Dense(train_ind.shape[1]))
@@ -303,9 +291,9 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=50, batch_size=5, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=epchs, batch_size=bsize, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
-    # plot history    
+    # plot history
 #    plt.plot(history.history['loss'], label='train')
 #    plt.plot(history.history['val_loss'], label='test')
 #    plt.xlabel('Epoch')
@@ -339,17 +327,26 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 #del(result)
+
+neurons = 8
+epochs = 50
+batchsize = 5
 numiters = 10
 #fig = plt.figure(figsize=(5,5))
 #plt.clf()
+
+print("Start time:",datetime.datetime.time(datetime.datetime.now()))
+
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
-        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom), axis=2)
+        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)
     else:
-        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom), axis=2)),axis=2)
+        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
         
-    
+print("End time:",datetime.datetime.time(datetime.datetime.now()))        
+        
+np.save('L02N08E50B05_50PTS_20172018.npy',result)
 
 #%% Evaluate performance:
 
@@ -358,16 +355,6 @@ actual = predictarrayfrom[:,0,-1]
 
 # Find the mask
 resultmask = np.ma.masked_less(result,1).mask
-
-## result.shape = [player, lag, iteration]
-#
-## Create an empty array for the RMSE results
-## The first dimension is the lag, and the second is the run realization
-#RMSEs = np.empty((result.shape[1],result.shape[2]))
-#
-#for iteration in range(result.shape[2]):
-#    for lag in range(result.shape[1]):
-#        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
 
 
 # Create an alternate measure of error: use mean of the lags for each player
@@ -382,95 +369,26 @@ for iteration in range(result.shape[2]):
     
     RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
 
-# For convenience, capture these errors in a single array. First columns are
-# the RMSEs for each lag, followed by the mean of errors for all lags,
-# then the error of the mean estimates for all lags.
-#RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
-
 # For now, I think the best representation of the error is the RMSE for
 # the mean of the the lag estimates. Report this as error.
 error = np.mean(RMSEmeans)
 
 print("Overall error: " + str(error))
 
-#np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo64_batch25.npy',result)
-
-
-
-
-#%%
-fig1 = plt.figure(figsize=(5,5))
-az = fig1.add_subplot(1,1,1)
-az.scatter(actual,np.mean(meanresult, axis=1),c="b")
-#az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
-#az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
-#az.scatter(actual[~resultmask[:,2,0]],np.mean(result[:,2,:][~resultmask[:,2,0]], axis=1),c="g", s=12)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Performance:\n2016: L03N06E50B05', fontsize=16)
-plt.grid(True)
-plt.show()
-
-#%% Try using percentile as an error? Should give an indication of the relative
-# ranking, which is what we're really after...
-
-# for a set of results, transform the predicted score into a percentile
-# Retrieve the responding variables for predictarrayfrom
-actual = predictarrayfrom[:,0,-1]
-
-# Find the mask
-resultmask = np.ma.masked_less(result,1).mask
-
-# Create an alternate measure of error: use mean of the lags for each player      
-
-meanresult = np.zeros((result.shape[0],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
-    
-meanresultpercentile = np.zeros_like(meanresult)
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresultpercentile[player,iteration] = stats.percentileofscore(meanresult[:,iteration], meanresult[player,iteration])
-
-# for the actual results, transform them into percentiles
-actualpercentile = np.zeros_like(actual)
-
-for player in range(actual.shape[0]):
-    actualpercentile[player] = stats.percentileofscore(actual,actual[player])
-
-# calculate the RMSE of the percentiles
-RMSEpercentiles = np.empty((result.shape[2]))
-
-
-for iteration in range(result.shape[2]):
-    RMSEpercentiles[iteration] = np.sqrt(mean_squared_error(meanresultpercentile[:,iteration],actualpercentile))
-
-
-errorpercentile = np.mean(RMSEpercentiles)
-
-print("Percentile error: " + str(errorpercentile))
-
-# plot the predicted and actual percentiles
-# plot one realizaiton
 
 
 fig = plt.figure(figsize=(5,5))
 az = fig.add_subplot(1,1,1)
+az.scatter(actual,np.mean(meanresult, axis=1),c="b")
 
-az.scatter(actualpercentile,np.mean(meanresultpercentile, axis=1),c="b", s=10)
-#az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
 az.plot([0,50,120],[0,50,120])
 plt.ylim(-5,110)
 plt.xlim(-5,110)
 plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
-plt.title('Performance Percentile:\n2016: L03N06E50B05', fontsize=16)
+plt.title('L02N08E50B05_50PTS_20172018', fontsize=16)
+#plt.text(10,85,str('RMSE = '+str(np.round(error,2))))
 plt.grid(True)
-plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)
 plt.show()
+
+

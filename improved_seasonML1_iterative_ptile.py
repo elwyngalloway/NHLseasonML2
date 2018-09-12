@@ -78,12 +78,23 @@ def extractlag(player, stat4lag, lag ):
     with conn:
         # get the cursor so we can do stuff
         cur = conn.cursor()
-
-        # Notice that the stats extracted are hard-coded...
-        cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed \
+        
+        # I want to retrieve stats for a season, plus age, draft position,
+        # position code (categorical!), name?
+        cur.execute("SELECT DISTINCT s_skater_summary.seasonId, \
+                    s_skater_summary.playerId, s_bio_info.playerBirthDate, \
+                    s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
+                    s_skater_summary.points, s_skater_summary.goals, s_skater_summary.ppPoints, \
+                    s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
+                    s_skater_summary.assists, s_skater_summary.gamesplayed \
                     FROM s_skater_summary \
-                    WHERE seasonId NOT IN (20172018) \
-                    AND playerId=?", [player])
+                    INNER JOIN s_bio_info \
+                        ON s_bio_info.playerId = s_skater_summary.playerId \
+                        AND s_bio_info.seasonId = s_skater_summary.seasonId \
+                    WHERE s_skater_summary.playerID = ? \
+                    AND s_skater_summary.seasonId NOT IN (20172018)", [player])
+        
+        
 
         data = cur.fetchall()
     
@@ -93,13 +104,26 @@ def extractlag(player, stat4lag, lag ):
         df = pd.DataFrame(data)
 
         # name the columns of df
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        # transform birth date to just birth year, then transform to age, then rename column
+        df['birthYear'] = pd.to_datetime(df['birthYear']).dt.year
+        df['birthYear'] = df['year'] // 10000 - df['birthYear']
+        df = df.rename(index=str, columns={'birthYear': 'age'})
+        # deal with the categorical data: Pandas has a function that helps...
+        # define names of all categories expected:
+        df['position'] = df['position'].astype('category',categories=['C', 'D', 'L', 'R'])
+        # append columns for each position
+        df = pd.concat([df,pd.get_dummies(df['position'], prefix='position')],axis=1)
+        # drop original position column
+        df.drop(['position'],axis=1, inplace=True)
+        # some players were never drafted - leaves blank in draftPos. Define this as 300
+        df['draftPos'].replace('', 300, inplace=True)
         # ensure the results are sorted by year, latest at the top:
         df = df.sort_values(['year'],ascending = False) # this step was not necessary for seasonML1 - results were already sorted!
         # create a dataframe of shifted values - these are lagged w.r.t. the original dataframe
         dfshift = df.shift(lag)
         # name the columns of the shifted df
-        dfshift.columns = ('yearlag', 'pointslag', 'goalslag', 'ppPointslag', 'shotslag', 'timeOnIcePerGamelag', 'assistslag', 'gameslag')
+        dfshift = dfshift.rename(index=str, columns={stat4lag : str(stat4lag + 'lag')})
 
         # find the index of the column desired for lagging
         columnindex = df.columns.get_loc(stat4lag)
@@ -109,20 +133,23 @@ def extractlag(player, stat4lag, lag ):
 
         #return df # may consider changing to return an array
         return np.array(df)
+        #return df
     
     else: # return NaNs of appropriate shape in case no data is retreived from database
         
         # create an empty array
-        temp = np.empty((1,6)) # should match number of extracted/lagged stats
+        temp = np.empty((1,16))
         # fill it with NaNs
         temp.fill(np.nan)
         # convert to a Dataframe
         df = pd.DataFrame(temp)
         # name these columns to match typical output
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games','pointslag')
+        df.columns = ('year', 'playerID', 'age','draftPos', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'position_C', 'position_D', 'position_L', 'position_R', str(stat4lag + 'lag'))
         
         #return df
         return np.array(df)
+        #return df
+        
 #%% Use function to extract stats for players identified
 
 if 'lagged1' in locals():
@@ -180,13 +207,13 @@ print(lagged1.shape,lagged2.shape,lagged3.shape)
 
 # Convert these arrays into dataframes for convenience later...
 lagged1 = pd.DataFrame(lagged1)
-lagged1.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
+lagged1 = lagged1.rename(index=str, columns={0: 'year'})
 
 lagged2 = pd.DataFrame(lagged2)
-lagged2.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
+lagged2 = lagged2.rename(index=str, columns={0: 'year'})
 
 lagged3 = pd.DataFrame(lagged3)
-lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
+lagged3 = lagged3.rename(index=str, columns={0: 'year'})
 
 
 #%% Separate training from target data
@@ -221,7 +248,7 @@ predictarrayfrom = np.transpose(np.dstack((np.array(lag1predictfrom),
 #   data into training and testing sets; trains the model; predicts; evaluates
 #   prediction quality
 
-def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
+def modelrun(modelfrom, predictfrom, hiddenlayers, nrons, epchs, bsize):
     
     """
     
@@ -280,6 +307,11 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with neurons
+    hlidx = 0
+    while hlidx < hiddenlayers:
+        model.add(LSTM(nrons, return_sequences=True))
+        hlidx += 1
+        
     model.add(LSTM(nrons))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
@@ -324,24 +356,19 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     # Return results (predicted responding variables):
     return inv_predicted_resp
 
-#%% Run iterations:
-#del(result)
-numiters = 10
-
-neurons = 16
-epochs = 50
-batchsize = 5
-
-#fig = plt.figure(figsize=(5,5))
-#plt.clf()
-for i in range(numiters):
-    print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
-    if i == 0:
-        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)
-    else:
-        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
-        
-    
+##%% Run iterations:
+##del(result)
+#numiters = 15
+##fig = plt.figure(figsize=(5,5))
+##plt.clf()
+#for i in range(numiters):
+#    print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
+#    if i == 0:
+#        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)
+#    else:
+#        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
+#        
+#    
 #%% To search for hyperparameters
 
 # define some things to evaluate results:
@@ -353,41 +380,57 @@ actual = predictarrayfrom[:,0,-1]
 
 
 
-def hpsearch(modelfrom, predictfrom, modeliter, nrons, epch, bsize):
+def hpsearch(modelfrom, predictfrom, modeliter, hlayers, nrons, epch, bsize):
     
     """
-    nrons, epch,bsize are expected to be lists
+    hlayers, nrons, epch,bsize are expected to be lists
     """
     
     # Define the result array to be populated
-    HPmap = np.empty((len(nrons), len(epch), len(bsize)))
+    HPmap = np.empty((len(hlayers), len(nrons), len(epch), len(bsize)))
     
-    print("Tough to estimate total run time, but working on __ /__ neuron tests")
-    
-    for N in nrons:
-        print(nrons.index(N)+1,"/",len(nrons))
-        for E in epch:
-            for B in bsize:
-                for i in range(modeliter):
-                    if i == 0:
-                        iterresult = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, N, E, B), axis=2)
-                    else:
-                        iterresult = np.concatenate((iterresult,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, N, E, B), axis=2)),axis=2)
+    for L in hlayers:
+        print(hlayers.index(L)+1,"/",len(hlayers), "hidden layers tests")
+        for N in nrons:
+            print("      ",nrons.index(N)+1,"/",len(nrons), "neuron tests")
+            for E in epch:
+                for B in bsize:
+                    for i in range(modeliter):
+                        if i == 0:
+                            iterresult = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, L, N, E, B), axis=2)
+                        else:
+                            iterresult = np.concatenate((iterresult,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, L, N, E, B), axis=2)),axis=2)
                         
-                # Determine the error for these iterations
-                RMSEmeans =np.empty((iterresult.shape[2]))
+                        # Determine the error for these iterations using percentiles
+                        RMSEptiles =np.empty((iterresult.shape[2]))
                 
-                meanresult = np.zeros((iterresult.shape[0],iterresult.shape[2]))
-                
-                for iteration in range(iterresult.shape[2]):
-                    for player in range(iterresult.shape[0]):
-                        meanresult[player,iteration] = np.mean(iterresult[player,:,iteration][np.ma.masked_greater(iterresult[player,:,iteration],2).mask])
+                    meanresult = np.zeros((iterresult.shape[0],iterresult.shape[2]))
+                               
+                    for iteration in range(iterresult.shape[2]):
+                        for player in range(iterresult.shape[0]):
+                            meanresult[player,iteration] = np.mean(iterresult[player,:,iteration][np.ma.masked_greater(iterresult[player,:,iteration],2).mask])
                     
-                    RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
+                    # Convert the prediction and actual results to percentiles
+                    meanresultptile = np.zeros_like(meanresult)
                 
-                del iterresult
+                    for iteration in range(iterresult.shape[2]):
+                        for player in range(iterresult.shape[0]):
+                            meanresultptile[player,iteration] = stats.percentileofscore(meanresult[:,iteration], meanresult[player,iteration])
                 
-                HPmap[nrons.index(N), epch.index(E), bsize.index(B)] = np.mean(RMSEmeans)
+                    # for the actual results, transform them into percentiles
+                    actualptile = np.zeros_like(actual)
+                
+                    for player in range(actual.shape[0]):
+                        actualptile[player] = stats.percentileofscore(actual,actual[player])
+                    
+                    # Calculate the RMSE of the percentiles
+                    for iteration in range(iterresult.shape[2]):
+                        RMSEptiles[iteration] = np.sqrt(mean_squared_error(meanresultptile[:,iteration],actualptile))
+
+
+                    del iterresult
+                
+                    HPmap[hlayers.index(L), nrons.index(N), epch.index(E), bsize.index(B)] = np.mean(RMSEptiles)
                 
                 
     return HPmap
@@ -395,159 +438,56 @@ def hpsearch(modelfrom, predictfrom, modeliter, nrons, epch, bsize):
 #%% Test the hyperparameters:
 
 # List the HPs to test
-neuronlist = [8,12,16]
-epochlist = [25,35]
-batchlist = [10,15] 
+hiddenlayerlist = [7]
+neuronlist = [4]
+epochlist = [50]
+batchlist = [5]
     
 print("Start time:",datetime.datetime.time(datetime.datetime.now()))
 
-result = hpsearch(modelarrrayfrom, predictarrayfrom, 7, neuronlist, epochlist, batchlist)
+result = hpsearch(modelarrrayfrom, predictarrayfrom, 7, hiddenlayerlist, neuronlist, epochlist, batchlist)
         
-print("End time:",datetime.datetime.time(datetime.datetime.now()))     
+print("End time:",datetime.datetime.time(datetime.datetime.now()))        
         
+np.save('HPsearch_multi_layer.npy',result)
+
+#%% Plot HP testing results in 3D for CONSTANT HIDDEN LAYERS
+
+#fig, ax = plt.subplots()
+#ax = plt.axes(projection='3d')
+#
+## Data for three-dimensional scattered points
+#xdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(neuronlist,1),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
+#ydata = np.ndarray.flatten(np.expand_dims(np.expand_dims(epochlist,0),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
+#zdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(batchlist,0),0)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
+#im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), cmap='viridis_r',vmin=27, vmax=29,  s=500*(29.5-np.ndarray.flatten(result)));
+## Add a colorbar
+#cbar = fig.colorbar(im, ax=ax)
+#cbar.set_label('Error')
+#ax.set_xlabel('Neurons')
+#ax.set_ylabel('Epochs')
+#ax.set_zlabel('Batch')
+#plt.show()
+
+#%% Plot HP testing results in 3D for CONSTANT EPOCHS & BATCHSIZE
 
 
-#%% Plot HP testing results in 3D
-
-fig, ax = plt.subplots()
-ax = plt.axes(projection='3d')
-
-# Data for three-dimensional scattered points
-xdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(neuronlist,1),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
-ydata = np.ndarray.flatten(np.expand_dims(np.expand_dims(epochlist,0),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
-zdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(batchlist,0),0)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
-im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), cmap='viridis', s=1000*(17-np.ndarray.flatten(result)))
-# Add a colorbar
-fig.colorbar(im, ax=ax)
-
-ax.set_xlabel('Neurons')
-ax.set_ylabel('Epochs')
-ax.set_zlabel('Batch')
-
-
-b = np.load('HPtestONE.npy')
-im = ax.scatter3D(b[:,0], ydata[:,1], zdata[:,2], c=b[:,3], cmap='viridis', s=1000*(17-b[:,3]))
+#fig, ax = plt.subplots()
+#
+## Data for three-dimensional scattered points
+#xdata = np.ndarray.flatten(np.expand_dims(neuronlist,0)*np.ones((len(neuronlist), len(hiddenlayerlist))))
+#ydata = np.ndarray.flatten(np.expand_dims(hiddenlayerlist,1)*np.ones((len(neuronlist), len(hiddenlayerlist))))
+#
+#im = ax.scatter(xdata, ydata, c=np.ndarray.flatten(result[:,:,0,0]), cmap='viridis_r',vmin=25, vmax=28,  s=500*(28-np.ndarray.flatten(result)));
+## Add a colorbar
+#cbar = fig.colorbar(im, ax=ax)
+#cbar.set_label('Error')
+#ax.set_xlabel('Neurons')
+#ax.set_ylabel('Hidden Layers')
+#ax.set_title('HP Search: 20162017 Alt Stats')
+#ax.set_xlim([3,15.5])
+#ax.set_ylim([-0.5,7.5])
+#
+#plt.show()
 
 
-#%% Visualize prediction results in boxplot
-
-# Find sort order - sort players by the mean of all realizations
-i = np.argsort(np.mean(meanresult,axis=1))
-
-# Plot the results in a boxplot
-fig = plt.figure(figsize=(15,15))
-
-ax = fig.add_subplot(1,1,1)
-ax.boxplot(meanresult[i,:].T)
-plt.xlabel('Player')
-plt.ylabel('Prediction')
-plt.title('Predictions (10 iterations)', fontsize=16)
-
-#%% Conventional performance evaluation:
-
-# Retrieve the responding variables for predictarrayfrom
-actual = predictarrayfrom[:,0,-1]
-
-# Find the mask
-resultmask = np.ma.masked_less(result,1).mask
-
-# Create an alternate measure of error: use mean of the lags for each player
-# as the prediction. Calculate the RMSE of these means.         
-RMSEmeans =np.empty((result.shape[2]))
-
-meanresult = np.zeros((result.shape[0],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
-    
-    RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
-
-# For now, I think the best representation of the error is the RMSE for
-# the mean of the the lag estimates. Report this as error.
-error = np.mean(RMSEmeans)
-
-fig2 = plt.figure(figsize=(5,5))
-az = fig2.add_subplot(1,1,1)
-az.scatter(actual,np.mean(meanresult, axis=1),c="b", s=10)
-#az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
-#az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
-#az.scatter(actual[~resultmask[:,2,0]],np.mean(result[:,2,:][~resultmask[:,2,0]], axis=1),c="g", s=12)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Actual vs. Predicted', fontsize=16)
-plt.grid(True)
-plt.text(10,85,str('RMSE = '+str(round(float(error),2))),fontsize=16)
-
-
-#%% Try using percentile as an error? Should give an indication of the relative
-# ranking, which is what we're really after...
-
-# for a set of results, transform the predicted score into a percentile
-# Retrieve the responding variables for predictarrayfrom
-actual = predictarrayfrom[:,0,-1]
-
-# Find the mask
-resultmask = np.ma.masked_less(result,1).mask
-
-# Create an alternate measure of error: use mean of the lags for each player      
-
-meanresult = np.zeros((result.shape[0],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
-    
-meanresultpercentile = np.zeros_like(meanresult)
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresultpercentile[player,iteration] = stats.percentileofscore(meanresult[:,iteration], meanresult[player,iteration])
-
-# for the actual results, transform them into percentiles
-actualpercentile = np.zeros_like(actual)
-
-for player in range(actual.shape[0]):
-    actualpercentile[player] = stats.percentileofscore(actual,actual[player])
-
-# calculate the RMSE of the percentiles
-RMSEpercentiles = np.empty((result.shape[2]))
-
-
-for iteration in range(result.shape[2]):
-    RMSEpercentiles[iteration] = np.sqrt(mean_squared_error(meanresultpercentile[:,iteration],actualpercentile))
-
-
-errorpercentile = np.mean(RMSEpercentiles)
-
-# plot the predicted and actual percentiles
-# plot one realizaiton
-
-
-fig = plt.figure(figsize=(10,5))
-az = fig.add_subplot(1,2,1)
-#az.scatter(actualpercentile,np.mean(meanresult, axis=1),c="b", s=10)
-az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Performance Percentile: \n One Realization', fontsize=16)
-plt.grid(True)
-plt.text(5,95,str('RMSE = '+str(round(float(RMSEpercentiles[0]),2))),fontsize=16)
-
-az = fig.add_subplot(1,2,2)
-az.scatter(actualpercentile,np.mean(meanresultpercentile, axis=1),c="b", s=10)
-#az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Performance Percentile: \n Mean of Realizations', fontsize=16)
-plt.grid(True)
-plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)

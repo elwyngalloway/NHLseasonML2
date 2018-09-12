@@ -319,8 +319,10 @@ def modelrun(modelfrom, predictfrom):
     # Inform algorithm that 0 represents non-values (values of -1 were scaled to 0!)
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
-    # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
-    model.add(LSTM(15))
+    # Define as LSTM with 12 neurons - not optimized - use 12 because I have 12 statistical categories
+#    model.add(LSTM(16, return_sequences=True))
+    model.add(LSTM(16, return_sequences=True))
+    model.add(LSTM(16))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
     model.add(Dense(train_ind.shape[1]))
@@ -330,15 +332,15 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=50, batch_size=5, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
     # plot history
-    plt.plot(history.history['loss'], label='train')
-    plt.plot(history.history['val_loss'], label='test')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
+#    plt.plot(history.history['loss'], label='train')
+#    plt.plot(history.history['val_loss'], label='test')
+#    plt.xlabel('Epoch')
+#    plt.ylabel('Loss')
+#    plt.legend()
+#    plt.show()
 
     # Make a prediction:    
     predicted_resp = model.predict(predictfrom_ind)
@@ -366,7 +368,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 #del(result)
-numiters = 15
+numiters = 10
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
@@ -386,13 +388,13 @@ resultmask = np.ma.masked_less(result,2).mask
 
 # result.shape = [player, lag, iteration]
 
-# Create an empty array for the RMSE results
-# The first dimension is the lag, and the second is the run realization
-RMSEs = np.empty((result.shape[1],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for lag in range(result.shape[1]):
-        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
+## Create an empty array for the RMSE results
+## The first dimension is the lag, and the second is the run realization
+#RMSEs = np.empty((result.shape[1],result.shape[2]))
+#
+#for iteration in range(result.shape[2]):
+#    for lag in range(result.shape[1]):
+#        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
 
 
 # Create an alternate measure of error: use mean of the lags for each player
@@ -410,7 +412,7 @@ for iteration in range(result.shape[2]):
 # For convenience, capture these errors in a single array. First columns are
 # the RMSEs for each lag, followed by the mean of errors for all lags,
 # then the error of the mean estimates for all lags.
-RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
+#RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
 
 # For now, I think the best representation of the error is the RMSE for
 # the mean of the the lag estimates. Report this as error.
@@ -427,13 +429,15 @@ print("Overall error: " + str(error))
 
 fig1 = plt.figure(figsize=(5,5))
 az = fig1.add_subplot(1,1,1)
-az.scatter(actual,np.mean(meanresult, axis=1),c="b")
+az.scatter(actual,np.mean(meanresult, axis=1),c="b", s=10)
 #az.scatter(actual_resp[:,1],inv_predicted_resp[:,1],c="r")
 #az.scatter(actual_resp[:,2],inv_predicted_resp[:,2],c="g")
 az.plot([0,50,120],[0,50,120])
-plt.ylim(-10,120)
-plt.xlim(-10,120)
+plt.ylim(-5,110)
+plt.xlim(-5,110)
 plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
 plt.title('Actual vs. Predicted', fontsize=16)
+plt.text(10,85,str('Error = '+str(np.round(error,2))),fontsize=12)
 plt.grid(True)
+plt.show()
