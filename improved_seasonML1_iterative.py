@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 
 import datetime
+from scipy import stats
 
 
 #%%
@@ -325,7 +326,12 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
 
 #%% Run iterations:
 #del(result)
-numiters = 15
+numiters = 10
+
+neurons = 16
+epochs = 50
+batchsize = 5
+
 #fig = plt.figure(figsize=(5,5))
 #plt.clf()
 for i in range(numiters):
@@ -421,3 +427,127 @@ ax.set_zlabel('Batch')
 
 b = np.load('HPtestONE.npy')
 im = ax.scatter3D(b[:,0], ydata[:,1], zdata[:,2], c=b[:,3], cmap='viridis', s=1000*(17-b[:,3]))
+
+
+#%% Visualize prediction results in boxplot
+
+# Find sort order - sort players by the mean of all realizations
+i = np.argsort(np.mean(meanresult,axis=1))
+
+# Plot the results in a boxplot
+fig = plt.figure(figsize=(15,15))
+
+ax = fig.add_subplot(1,1,1)
+ax.boxplot(meanresult[i,:].T)
+plt.xlabel('Player')
+plt.ylabel('Prediction')
+plt.title('Predictions (10 iterations)', fontsize=16)
+
+#%% Conventional performance evaluation:
+
+# Retrieve the responding variables for predictarrayfrom
+actual = predictarrayfrom[:,0,-1]
+
+# Find the mask
+resultmask = np.ma.masked_less(result,1).mask
+
+# Create an alternate measure of error: use mean of the lags for each player
+# as the prediction. Calculate the RMSE of these means.         
+RMSEmeans =np.empty((result.shape[2]))
+
+meanresult = np.zeros((result.shape[0],result.shape[2]))
+
+for iteration in range(result.shape[2]):
+    for player in range(result.shape[0]):
+        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
+    
+    RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
+
+# For now, I think the best representation of the error is the RMSE for
+# the mean of the the lag estimates. Report this as error.
+error = np.mean(RMSEmeans)
+
+fig2 = plt.figure(figsize=(5,5))
+az = fig2.add_subplot(1,1,1)
+az.scatter(actual,np.mean(meanresult, axis=1),c="b", s=10)
+#az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
+#az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
+#az.scatter(actual[~resultmask[:,2,0]],np.mean(result[:,2,:][~resultmask[:,2,0]], axis=1),c="g", s=12)
+az.plot([0,50,120],[0,50,120])
+plt.ylim(-5,110)
+plt.xlim(-5,110)
+plt.xlabel('Actual Results')
+plt.ylabel('Predicted Results')
+plt.title('Actual vs. Predicted', fontsize=16)
+plt.grid(True)
+plt.text(10,85,str('RMSE = '+str(round(float(error),2))),fontsize=16)
+
+
+#%% Try using percentile as an error? Should give an indication of the relative
+# ranking, which is what we're really after...
+
+# for a set of results, transform the predicted score into a percentile
+# Retrieve the responding variables for predictarrayfrom
+actual = predictarrayfrom[:,0,-1]
+
+# Find the mask
+resultmask = np.ma.masked_less(result,1).mask
+
+# Create an alternate measure of error: use mean of the lags for each player      
+
+meanresult = np.zeros((result.shape[0],result.shape[2]))
+
+for iteration in range(result.shape[2]):
+    for player in range(result.shape[0]):
+        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
+    
+meanresultpercentile = np.zeros_like(meanresult)
+
+for iteration in range(result.shape[2]):
+    for player in range(result.shape[0]):
+        meanresultpercentile[player,iteration] = stats.percentileofscore(meanresult[:,iteration], meanresult[player,iteration])
+
+# for the actual results, transform them into percentiles
+actualpercentile = np.zeros_like(actual)
+
+for player in range(actual.shape[0]):
+    actualpercentile[player] = stats.percentileofscore(actual,actual[player])
+
+# calculate the RMSE of the percentiles
+RMSEpercentiles = np.empty((result.shape[2]))
+
+
+for iteration in range(result.shape[2]):
+    RMSEpercentiles[iteration] = np.sqrt(mean_squared_error(meanresultpercentile[:,iteration],actualpercentile))
+
+
+errorpercentile = np.mean(RMSEpercentiles)
+
+# plot the predicted and actual percentiles
+# plot one realizaiton
+
+
+fig = plt.figure(figsize=(10,5))
+az = fig.add_subplot(1,2,1)
+#az.scatter(actualpercentile,np.mean(meanresult, axis=1),c="b", s=10)
+az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
+az.plot([0,50,120],[0,50,120])
+plt.ylim(-5,110)
+plt.xlim(-5,110)
+plt.xlabel('Actual Results')
+plt.ylabel('Predicted Results')
+plt.title('Performance Percentile: \n One Realization', fontsize=16)
+plt.grid(True)
+plt.text(5,95,str('RMSE = '+str(round(float(RMSEpercentiles[0]),2))),fontsize=16)
+
+az = fig.add_subplot(1,2,2)
+az.scatter(actualpercentile,np.mean(meanresultpercentile, axis=1),c="b", s=10)
+#az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
+az.plot([0,50,120],[0,50,120])
+plt.ylim(-5,110)
+plt.xlim(-5,110)
+plt.xlabel('Actual Results')
+plt.ylabel('Predicted Results')
+plt.title('Performance Percentile: \n Mean of Realizations', fontsize=16)
+plt.grid(True)
+plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)

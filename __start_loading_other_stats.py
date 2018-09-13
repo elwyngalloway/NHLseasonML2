@@ -32,6 +32,7 @@ from keras.layers import LSTM
 from keras.layers import Masking
 
 import matplotlib.pyplot as plt
+from scipy import stats
 
 
 #%%
@@ -243,6 +244,19 @@ lag2model = lagged2.loc[lagged1['year'] != 20152016]
 lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
 lag3model = lagged3.loc[lagged1['year'] != 20152016]
 
+## predict from the 20152016 season (lag = 1)
+#lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
+## model from the remaining seasons
+#lag1model = lagged1.loc[lagged1['year'] != 20162017]
+#
+## predict from the 20142015 season (lag = 2)
+#lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
+## model from the remaining seasons
+#lag2model = lagged2.loc[lagged1['year'] != 20162017]
+#
+#lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
+#lag3model = lagged3.loc[lagged1['year'] != 20162017]
+
 
 
 # This array contains all data needed test and train the model
@@ -320,7 +334,11 @@ def modelrun(modelfrom, predictfrom):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
-    model.add(LSTM(15))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
     model.add(Dense(train_ind.shape[1]))
@@ -330,15 +348,15 @@ def modelrun(modelfrom, predictfrom):
     
     
     # train network
-    history = model.fit(train_ind, train_resp, epochs=64, batch_size=25, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
+    history = model.fit(train_ind, train_resp, epochs=50, batch_size=5, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
     # plot history
-    plt.plot(history.history['loss'], label='train')
-    plt.plot(history.history['val_loss'], label='test')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
+#    plt.plot(history.history['loss'], label='train')
+#    plt.plot(history.history['val_loss'], label='test')
+#    plt.xlabel('Epoch')
+#    plt.ylabel('Loss')
+#    plt.legend()
+#    plt.show()
 
     # Make a prediction:    
     predicted_resp = model.predict(predictfrom_ind)
@@ -366,7 +384,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 #del(result)
-numiters = 15
+numiters = 10
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
@@ -386,14 +404,6 @@ resultmask = np.ma.masked_less(result,2).mask
 
 # result.shape = [player, lag, iteration]
 
-# Create an empty array for the RMSE results
-# The first dimension is the lag, and the second is the run realization
-RMSEs = np.empty((result.shape[1],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for lag in range(result.shape[1]):
-        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
-
 
 # Create an alternate measure of error: use mean of the lags for each player
 # as the prediction. Calculate the RMSE of these means.         
@@ -407,10 +417,6 @@ for iteration in range(result.shape[2]):
     
     RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
 
-# For convenience, capture these errors in a single array. First columns are
-# the RMSEs for each lag, followed by the mean of errors for all lags,
-# then the error of the mean estimates for all lags.
-RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
 
 # For now, I think the best representation of the error is the RMSE for
 # the mean of the the lag estimates. Report this as error.
@@ -423,17 +429,76 @@ print("Overall error: " + str(error))
 # something's up with the error... rookie points are still being forecast for years not played...
 # actually, that's expected! They are still forecast, but we want to ignore them during
 # error calculations. I adjusted the threshold for the mask to 2, and that should make a difference.
-#%% Plot some results like this:
+
+# Plot some results like this:
 
 fig1 = plt.figure(figsize=(5,5))
 az = fig1.add_subplot(1,1,1)
-az.scatter(actual,np.mean(meanresult, axis=1),c="b")
-#az.scatter(actual_resp[:,1],inv_predicted_resp[:,1],c="r")
-#az.scatter(actual_resp[:,2],inv_predicted_resp[:,2],c="g")
+az.scatter(actual,np.mean(meanresult, axis=1),c="b", s=10)
+
 az.plot([0,50,120],[0,50,120])
-plt.ylim(-10,120)
-plt.xlim(-10,120)
+plt.ylim(-5,110)
+plt.xlim(-5,110)
 plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
-plt.title('Actual vs. Predicted', fontsize=16)
+plt.title('20162017 Alt Stats:\nL05N06E50B05', fontsize=16)
 plt.grid(True)
+plt.text(5,95,str('RMSE = '+str(round(float(error),2))),fontsize=16)
+
+#%% Try using percentile as an error? Should give an indication of the relative
+# ranking, which is what we're really after...
+
+# for a set of results, transform the predicted score into a percentile
+# Retrieve the responding variables for predictarrayfrom
+actual = predictarrayfrom[:,0,-1]
+
+# Find the mask
+resultmask = np.ma.masked_less(result,1).mask
+
+# Create an alternate measure of error: use mean of the lags for each player      
+
+meanresult = np.zeros((result.shape[0],result.shape[2]))
+
+for iteration in range(result.shape[2]):
+    for player in range(result.shape[0]):
+        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
+    
+meanresultpercentile = np.zeros_like(meanresult)
+
+for iteration in range(result.shape[2]):
+    for player in range(result.shape[0]):
+        meanresultpercentile[player,iteration] = stats.percentileofscore(meanresult[:,iteration], meanresult[player,iteration])
+
+# for the actual results, transform them into percentiles
+actualpercentile = np.zeros_like(actual)
+
+for player in range(actual.shape[0]):
+    actualpercentile[player] = stats.percentileofscore(actual,actual[player])
+
+# calculate the RMSE of the percentiles
+RMSEpercentiles = np.empty((result.shape[2]))
+
+
+for iteration in range(result.shape[2]):
+    RMSEpercentiles[iteration] = np.sqrt(mean_squared_error(meanresultpercentile[:,iteration],actualpercentile))
+
+
+errorpercentile = np.mean(RMSEpercentiles)
+
+# plot the predicted and actual percentiles
+# plot one realizaiton
+
+
+fig = plt.figure(figsize=(5,5))
+
+az = fig.add_subplot(1,1,1)
+az.scatter(actualpercentile,np.mean(meanresultpercentile, axis=1),c="b", s=10)
+#az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
+az.plot([0,50,120],[0,50,120])
+plt.ylim(-5,110)
+plt.xlim(-5,110)
+plt.xlabel('Actual Results')
+plt.ylabel('Predicted Results')
+plt.title('20162017 Alt Stats:\nPercentile L05N06E50B05', fontsize=16)
+plt.grid(True)
+plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)
