@@ -163,6 +163,67 @@ def extractlag(player, stat4lag, lag ):
         #return df
         return np.array(df)
         #return df
+        
+#%% Define a function to retrieve stats from the database
+
+
+def extractlagprediction(player, stat4lag, lag ):
+    """
+    Similar to extractlag, except that it's to create the array to predict from.
+
+    """
+
+    db_name = "NHLseasonML_seasonstats.db"
+    conn = sqlite3.connect(db_name)
+
+    with conn:
+        cur = conn.cursor()
+        
+        cur.execute("SELECT DISTINCT s_skater_summary.seasonId, \
+                    s_skater_summary.playerId, s_bio_info.playerBirthDate, \
+                    s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
+                    s_skater_summary.points, s_skater_summary.goals, s_skater_summary.ppPoints, \
+                    s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
+                    s_skater_summary.assists, s_skater_summary.gamesplayed \
+                    FROM s_skater_summary \
+                    INNER JOIN s_bio_info \
+                        ON s_bio_info.playerId = s_skater_summary.playerId \
+                        AND s_bio_info.seasonId = s_skater_summary.seasonId \
+                    WHERE s_skater_summary.playerID = ? \
+                    AND s_skater_summary.seasonId NOT IN (20182019)", [player])
+
+        data = cur.fetchall()
+    
+    if len(data) > 0:
+
+        df = pd.DataFrame(data)
+
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        df['birthYear'] = pd.to_datetime(df['birthYear']).dt.year
+        df['birthYear'] = df['year'] // 10000 - df['birthYear']
+        df = df.rename(index=str, columns={'birthYear': 'age'})
+        df['position'] = df['position'].astype('category',categories=['C', 'D', 'L', 'R'])
+        df = pd.concat([df,pd.get_dummies(df['position'], prefix='position')],axis=1)
+        df.drop(['position'],axis=1, inplace=True)
+        df['draftPos'].replace('', 300, inplace=True)
+        df = df.sort_values(['year'],ascending = False)
+        dfshift = df.shift(lag)
+        dfshift = dfshift.rename(index=str, columns={stat4lag : str(stat4lag + 'lag')})
+
+        columnindex = df.columns.get_loc(stat4lag)
+
+        df = df.join(dfshift.iloc[:,columnindex]).iloc[lag-1:,:] # This line is distinct from the testing version
+        
+        return np.array(df)
+
+    
+    else:
+        temp = np.empty((1,16))
+        temp.fill(np.nan)
+        df = pd.DataFrame(temp)
+        df.columns = ('year', 'playerID', 'age','draftPos', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'position_C', 'position_D', 'position_L', 'position_R', str(stat4lag + 'lag'))
+        
+        return np.array(df)
 
 #%% Use function to extract stats for players identified
         
@@ -211,21 +272,7 @@ for player in players:
 
         else:
             lagged3 = interim[:,:]
-            
-        
-        # Now the prediction "lag" - Special for Production Version
-        #interim = np.zeros_like(interim1) - 999
 
-        interim0 = extractlag(int(player), 'points', 0)
-        np.array(pd.DataFrame(interim0).dropna(inplace=True))
-
-        #interim[:interim0.shape[0],:] = interim0
-
-        if 'lagged0' in locals():
-            lagged0 = np.append(lagged0, interim0, axis=0)
-
-        else:
-            lagged0 = interim[:,:]
 
 
 # Check that the shapes of the three arrays are identical:
@@ -255,24 +302,66 @@ from the database.
 """
 
 # Compile training data
-#modelarrayfrom = np.transpose(np.dstack((np.array(lagged1),
-#                                    np.array(lagged2),
-#                                    np.array(lagged3))), (0,2,1))
 modelarrayfrom = np.transpose(np.dstack((lagged1,lagged2,lagged3)), (0,2,1))
 
 
+#Compile the predict-from data
+# Go back to the database, retrieve the data for the predict-from array
+for player in players:
+    
+    # Start with the first lag
+    interim1 = extractlagprediction(int(player),'points',1) # create 2D array of a player's performance
+    np.array(pd.DataFrame(interim1).dropna(inplace=True)) # ignore "empty" rows
+    
+    if interim1.shape[0] > 0:
+    
+        if 'lagged1pred' in locals(): # if lagged1 already exists, append the player's results to it
+            lagged1pred = np.append(lagged1pred, interim1, axis=0)
 
-#%%
-#predictarrayfrom = 
+        else: # else, create lagged1
+            lagged1pred = interim1[:]
 
+        
+        # Now the second lag
+        # Ensure lagged2 will have same shape as lagged1 by making each player's
+        # contribution have the same shape for each lag.
+        interim = np.zeros_like(interim1) - 999 # Identify missing data as -999
 
+        interim2 = extractlagprediction(int(player),'points',2)
+        np.array(pd.DataFrame(interim2).dropna(inplace=True))
 
-#lag1predictfrom = lagged0.loc[lagged1['year'] == 20172018]
-lag1predictfrom = lagged0[lagged0[:,0] == 20172018] 
+        interim[:interim2.shape[0],:] = interim2
 
+        if 'lagged2pred' in locals():
+            lagged2pred = np.append(lagged2pred, interim, axis=0)
 
+        else:
+            lagged2pred = interim[:,:]
 
-lag2predictfrom = np.append(np.delete(lagged0,0,0),np.expand_dims(np.zeros_like(lagged0[0])-999,axis=0),axis=0)[lagged0[:,0] == 20172018]
+        
+        # Now the third lag
+        interim = np.zeros_like(interim1) - 999
+
+        interim3 = extractlagprediction(int(player), 'points', 3)
+        np.array(pd.DataFrame(interim3).dropna(inplace=True))
+
+        interim[:interim3.shape[0],:] = interim3
+
+        if 'lagged3pred' in locals():
+            lagged3pred = np.append(lagged3pred, interim, axis=0)
+
+        else:
+            lagged3pred = interim[:,:]
+
+lag1predictfrom = lagged1pred[lagged1pred[:,0] == 20172018]
+lag2predictfrom = lagged2pred[lagged1pred[:,0] == 20172018]
+lag3predictfrom = lagged3pred[lagged1pred[:,0] == 20172018]
+
+predictarrayfrom = np.transpose(np.dstack((lag1predictfrom, \
+                                           lag2predictfrom, \
+                                           lag3predictfrom)), (0,2,1))
+
+predictarrayfrom[np.isnan(predictarrayfrom)]=-999
 
 #%% Let's harness things from here on. Define a function that separates the
 #   data into training and testing sets; trains the model; predicts; evaluates
@@ -291,7 +380,7 @@ def modelrun(modelfrom, predictfrom):
     predictfrommask = np.ma.masked_equal(predictfrom,-999).mask
     # Use them to reassign -999s as max stat value - this keeps -999 from affection the scaling
     modelfrom[modelfrommask] = (np.ones_like(modelfrom)*np.max(modelfrom,(0,1)))[modelfrommask]
-    predictfrom[predictfrommask] = (np.ones_like(predictfrom)*np.max(predictfrom,(0,1)))[predictfrommask]
+    predictfrom[predictfrommask] = (np.ones_like(predictfrom)*np.max(modelfrom,(0,1)))[predictfrommask] # Slightly different than testing version
     
     
     #  Apply the 3D scaler:
@@ -338,6 +427,7 @@ def modelrun(modelfrom, predictfrom):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
+    model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6, return_sequences=True))
@@ -392,7 +482,7 @@ for i in range(numiters):
 #%% FIGURE OUT WHAT TO SAVE - PROBABLY A NUMPY ARRAY OF ALL PREDICTIONS
 
 
-np.save('20182019_points_L04N06E50B05.npy',result)
+np.save('20182019_points_L05N06E50B05.npy',result)
 
 
 
