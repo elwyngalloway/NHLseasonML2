@@ -325,6 +325,7 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     return inv_predicted_resp
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 #%% Run iterations:
 #del(result)
 numiters = 10
@@ -344,6 +345,8 @@ for i in range(numiters):
         
     
 =======
+=======
+>>>>>>> origin/iterate_for_hyperPs
 ##%% Run iterations:
 ##del(result)
 #numiters = 15
@@ -357,6 +360,9 @@ for i in range(numiters):
 #        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
 #        
 #    
+<<<<<<< HEAD
+>>>>>>> origin/iterate_for_hyperPs
+=======
 >>>>>>> origin/iterate_for_hyperPs
 #%% To search for hyperparameters
 
@@ -441,6 +447,7 @@ ax.set_ylabel('Epochs')
 ax.set_zlabel('Batch')
 
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 b = np.load('HPtestONE.npy')
 im = ax.scatter3D(b[:,0], ydata[:,1], zdata[:,2], c=b[:,3], cmap='viridis', s=1000*(17-b[:,3]))
@@ -568,6 +575,9 @@ plt.ylabel('Predicted Results')
 plt.title('Performance Percentile: \n Mean of Realizations', fontsize=16)
 plt.grid(True)
 plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)
+=======
+
+>>>>>>> origin/iterate_for_hyperPs
 =======
 
 >>>>>>> origin/iterate_for_hyperPs
