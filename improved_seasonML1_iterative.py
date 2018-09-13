@@ -324,6 +324,7 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     # Return results (predicted responding variables):
     return inv_predicted_resp
 
+<<<<<<< HEAD
 #%% Run iterations:
 #del(result)
 numiters = 10
@@ -342,6 +343,21 @@ for i in range(numiters):
         result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
         
     
+=======
+##%% Run iterations:
+##del(result)
+#numiters = 15
+##fig = plt.figure(figsize=(5,5))
+##plt.clf()
+#for i in range(numiters):
+#    print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
+#    if i == 0:
+#        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)
+#    else:
+#        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
+#        
+#    
+>>>>>>> origin/iterate_for_hyperPs
 #%% To search for hyperparameters
 
 # define some things to evaluate results:
@@ -395,17 +411,17 @@ def hpsearch(modelfrom, predictfrom, modeliter, nrons, epch, bsize):
 #%% Test the hyperparameters:
 
 # List the HPs to test
-neuronlist = [8,12,16]
-epochlist = [25,35]
-batchlist = [10,15] 
+neuronlist = [4,6,8,12,16]
+epochlist = [15,20,30,50]
+batchlist = [5,10,25,50]
     
 print("Start time:",datetime.datetime.time(datetime.datetime.now()))
 
-result = hpsearch(modelarrrayfrom, predictarrayfrom, 7, neuronlist, epochlist, batchlist)
+result = hpsearch(modelarrrayfrom, predictarrayfrom, 10, neuronlist, epochlist, batchlist)
         
-print("End time:",datetime.datetime.time(datetime.datetime.now()))     
+print("Start time:",datetime.datetime.time(datetime.datetime.now()))        
         
-
+np.save('HPsearch.npy',result)
 
 #%% Plot HP testing results in 3D
 
@@ -416,15 +432,16 @@ ax = plt.axes(projection='3d')
 xdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(neuronlist,1),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
 ydata = np.ndarray.flatten(np.expand_dims(np.expand_dims(epochlist,0),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
 zdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(batchlist,0),0)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
-im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), cmap='viridis', s=1000*(17-np.ndarray.flatten(result)))
+im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), vmin=15.5, vmax=16.75, cmap='viridis_r', s=1000*(16.75-np.ndarray.flatten(result)));
 # Add a colorbar
-fig.colorbar(im, ax=ax)
-
+cbar = fig.colorbar(im, ax=ax)
+cbar.set_label('Error')
 ax.set_xlabel('Neurons')
 ax.set_ylabel('Epochs')
 ax.set_zlabel('Batch')
 
 
+<<<<<<< HEAD
 b = np.load('HPtestONE.npy')
 im = ax.scatter3D(b[:,0], ydata[:,1], zdata[:,2], c=b[:,3], cmap='viridis', s=1000*(17-b[:,3]))
 
@@ -551,3 +568,6 @@ plt.ylabel('Predicted Results')
 plt.title('Performance Percentile: \n Mean of Realizations', fontsize=16)
 plt.grid(True)
 plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)
+=======
+
+>>>>>>> origin/iterate_for_hyperPs
