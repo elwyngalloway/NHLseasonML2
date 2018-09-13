@@ -38,7 +38,8 @@ Most of the remaining steps are around improving the results. Which offer the mo
 \
 
 \b STEP 3
-\b0  - Hyperparameter testing may demonstrate the minimum number of iterations that must be made for reasonable results, which will allow optimal run times for later tests.
+\b0  - Hyperparameter testing may demonstrate the minimum number of iterations that must be made for reasonable results, which will allow optimal run times for later tests.\
+	First test results: results improve with more neurons, more epochs, and smaller batches. There is some compensation, however, where a low number of epochs can work if the batch is small enough (and vice versa). Also a low number of neurons can be compensated by using small batches with many epochs. The error values are global, meaning there is some character of the results that is not captured: the prediction quality of high and low scorers. I may need to adjust the prediction scoring metric to remove the bias to mid-range scorers.
 \b \
 \
 STEP 4
@@ -57,6 +58,10 @@ The last step seems like the biggest hill to climb. Getting there would be pheno
 \
 Okay, but these aren\'92t the things left to accomplish. DRAFT TOOLS! To date, the excel sheets have worked quite well in-draft. However, if the new player forecast data may not be easily visualized in Excel. So: modify Excel tools to handle new information? Or develop new tools in Python for in-draft data visualization? If we go the Excel route, the stochastic forecast information may have to be summarized before moving into Excel. We\'92ll see.\
 	It\'92s probably best to focus stick with what\'92s worked before. Excel it is!\
+\
+\
+\
+Is there a way to unbias error calculations?\
 \
 
 \b \

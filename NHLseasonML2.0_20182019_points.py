@@ -1,10 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Tue Sep 11 21:36:03 2018
 
+NHLseasonML 2.0 - Predicting 20182019 Points
+Production Version
+
+Predict the points NHL players will accumulate in the 20182019 season.
+
+Key parameters used for this machine learning algorithm:
+    3 years of lag
+    XXXX Hidden Layers of Neurons
+    XXXX Neurons in each layer
+    XXXX Epochs
+    Batch size of XXXX
+    XXXX Realizations simulated
+    Forecast for players who have scored XXXX points in a season
+
+It's worth noting that this algo has been stripped down to some degree. Some
+functionality used in development has been removed.
 
 @author: Galloway
 """
+
 
 import sqlite3
 import numpy as np
@@ -12,14 +30,10 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import mean_squared_error
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
 from keras.layers import Masking
-
-import matplotlib.pyplot as plt
 
 
 #%%
@@ -33,10 +47,13 @@ with conn:
     cur = conn.cursor()
     
     # SQLite statement to retreive the data in question (forwards who have
-    # scored more than 50 points in a season):
-    cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 50 \
-                AND playerPositionCode IN ('C', 'F', 'L', 'R') \
-                AND seasonID NOT IN (20172018)")
+    # scored more than 30 points in a season):
+
+
+    cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 30 \
+                AND playerPositionCode IN ('C', 'D', 'L', 'R') \
+                AND seasonID NOT IN (20182019) ") #should be none for 20182019 anyway
+    
     
     # Put selected playerIds in an array (playerId is a unique identifier)
     data = np.array(cur.fetchall())
@@ -49,7 +66,8 @@ players = np.unique(data)
 print(players.shape[0], "players identified")
 
 
-#%% Define a function
+#%% Define a function to retrieve stats from the database
+
 
 def extractlag(player, stat4lag, lag ):
     """
@@ -74,12 +92,23 @@ def extractlag(player, stat4lag, lag ):
     with conn:
         # get the cursor so we can do stuff
         cur = conn.cursor()
-
-        # Notice that the stats extracted are hard-coded...
-        cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed \
+        
+        # I want to retrieve stats for a season, plus age, draft position,
+        # position code (categorical!), name?
+        cur.execute("SELECT DISTINCT s_skater_summary.seasonId, \
+                    s_skater_summary.playerId, s_bio_info.playerBirthDate, \
+                    s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
+                    s_skater_summary.points, s_skater_summary.goals, s_skater_summary.ppPoints, \
+                    s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
+                    s_skater_summary.assists, s_skater_summary.gamesplayed \
                     FROM s_skater_summary \
-                    WHERE seasonId NOT IN (20172018) \
-                    AND playerId=?", [player])
+                    INNER JOIN s_bio_info \
+                        ON s_bio_info.playerId = s_skater_summary.playerId \
+                        AND s_bio_info.seasonId = s_skater_summary.seasonId \
+                    WHERE s_skater_summary.playerID = ? \
+                    AND s_skater_summary.seasonId NOT IN (20182019)", [player])
+        
+        
 
         data = cur.fetchall()
     
@@ -89,40 +118,53 @@ def extractlag(player, stat4lag, lag ):
         df = pd.DataFrame(data)
 
         # name the columns of df
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        # transform birth date to just birth year, then transform to age, then rename column
+        df['birthYear'] = pd.to_datetime(df['birthYear']).dt.year
+        df['birthYear'] = df['year'] // 10000 - df['birthYear']
+        df = df.rename(index=str, columns={'birthYear': 'age'})
+        # deal with the categorical data: Pandas has a function that helps...
+        # define names of all categories expected:
+        df['position'] = df['position'].astype('category',categories=['C', 'D', 'L', 'R'])
+        # append columns for each position
+        df = pd.concat([df,pd.get_dummies(df['position'], prefix='position')],axis=1)
+        # drop original position column
+        df.drop(['position'],axis=1, inplace=True)
+        # some players were never drafted - leaves blank in draftPos. Define this as 300
+        df['draftPos'].replace('', 300, inplace=True)
         # ensure the results are sorted by year, latest at the top:
-        df = df.sort_values(['year'],ascending = False) # this step was not necessary for seasonML1 - results were already sorted!
+        df = df.sort_values(['year'],ascending = False)
         # create a dataframe of shifted values - these are lagged w.r.t. the original dataframe
         dfshift = df.shift(lag)
         # name the columns of the shifted df
-        dfshift.columns = ('yearlag', 'pointslag', 'goalslag', 'ppPointslag', 'shotslag', 'timeOnIcePerGamelag', 'assistslag', 'gameslag')
+        dfshift = dfshift.rename(index=str, columns={stat4lag : str(stat4lag + 'lag')})
 
         # find the index of the column desired for lagging
         columnindex = df.columns.get_loc(stat4lag)
 
         # append the appropriate column of the shifted df to the end of the original df
         df = df.join(dfshift.iloc[:,columnindex]).iloc[lag:,:]
-
+        
         #return df # may consider changing to return an array
         return np.array(df)
+        #return df
     
     else: # return NaNs of appropriate shape in case no data is retreived from database
         
         # create an empty array
-        temp = np.empty((1,6)) # should match number of extracted/lagged stats
+        temp = np.empty((1,16))
         # fill it with NaNs
         temp.fill(np.nan)
         # convert to a Dataframe
         df = pd.DataFrame(temp)
         # name these columns to match typical output
-        df.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games','pointslag')
+        df.columns = ('year', 'playerID', 'age','draftPos', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'position_C', 'position_D', 'position_L', 'position_R', str(stat4lag + 'lag'))
         
         #return df
         return np.array(df)
-#%% Use function to extract stats for players identified
+        #return df
 
-if 'lagged1' in locals():
-    del(lagged1, lagged2, lagged3)
+#%% Use function to extract stats for players identified
         
 for player in players:
     
@@ -169,53 +211,73 @@ for player in players:
 
         else:
             lagged3 = interim[:,:]
+            
+        
+        # Now the prediction "lag" - Special for Production Version
+        #interim = np.zeros_like(interim1) - 999
+
+        interim0 = extractlag(int(player), 'points', 0)
+        np.array(pd.DataFrame(interim0).dropna(inplace=True))
+
+        #interim[:interim0.shape[0],:] = interim0
+
+        if 'lagged0' in locals():
+            lagged0 = np.append(lagged0, interim0, axis=0)
+
+        else:
+            lagged0 = interim[:,:]
 
 
 # Check that the shapes of the three arrays are identical:
 print(lagged1.shape,lagged2.shape,lagged3.shape)
 
-# Convert these arrays into dataframes for convenience later...
-lagged1 = pd.DataFrame(lagged1)
-lagged1.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
+## Convert these arrays into dataframes for convenience later...
+#lagged1 = pd.DataFrame(lagged1)
+#lagged1 = lagged1.rename(index=str, columns={0: 'year'})
+#
+#lagged2 = pd.DataFrame(lagged2)
+#lagged2 = lagged2.rename(index=str, columns={0: 'year'})
+#
+#lagged3 = pd.DataFrame(lagged3)
+#lagged3 = lagged3.rename(index=str, columns={0: 'year'})
 
-lagged2 = pd.DataFrame(lagged2)
-lagged2.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
+#%% 
+"""
+This section is different than the testing version.
 
-lagged3 = pd.DataFrame(lagged3)
-lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'pointslag')
+Each player's most recent season has been eliminated (don't worry... their
+production for that season still remains as a lagged variable).
 
-
-#%% Separate training from target data
-
-# predict from the 20152016 season (lag = 1)
-lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
-# model from the remaining seasons
-lag1model = lagged1.loc[lagged1['year'] != 20152016]
-
-# predict from the 20142015 season (lag = 2)
-lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
-# model from the remaining seasons
-lag2model = lagged2.loc[lagged1['year'] != 20152016]
-
-lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
-lag3model = lagged3.loc[lagged1['year'] != 20152016]
+This production version of the algo must retrieve the data for predictions
+from the database.
 
 
+"""
 
-# This array contains all data needed test and train the model
-modelarrrayfrom = np.transpose(np.dstack((np.array(lag1model),
-                                    np.array(lag2model),
-                                    np.array(lag3model))), (0,2,1))
+# Compile training data
+#modelarrayfrom = np.transpose(np.dstack((np.array(lagged1),
+#                                    np.array(lagged2),
+#                                    np.array(lagged3))), (0,2,1))
+modelarrayfrom = np.transpose(np.dstack((lagged1,lagged2,lagged3)), (0,2,1))
 
-# This array is the one that will be predicted from:
-predictarrayfrom = np.transpose(np.dstack((np.array(lag1predictfrom),
-                                      np.array(lag2predictfrom),
-                                      np.array(lag3predictfrom))), (0,2,1))
 
+
+#%%
+#predictarrayfrom = 
+
+
+
+#lag1predictfrom = lagged0.loc[lagged1['year'] == 20172018]
+lag1predictfrom = lagged0[lagged0[:,0] == 20172018] 
+
+
+
+lag2predictfrom = np.append(np.delete(lagged0,0,0),np.expand_dims(np.zeros_like(lagged0[0])-999,axis=0),axis=0)[lagged0[:,0] == 20172018]
 
 #%% Let's harness things from here on. Define a function that separates the
 #   data into training and testing sets; trains the model; predicts; evaluates
 #   prediction quality
+
 
 def modelrun(modelfrom, predictfrom):
     
@@ -227,7 +289,7 @@ def modelrun(modelfrom, predictfrom):
     # Create masks of the modelfrom and predictfrom
     modelfrommask = np.ma.masked_equal(modelfrom,-999).mask
     predictfrommask = np.ma.masked_equal(predictfrom,-999).mask
-    # Use them to reassign -999s as max stat value
+    # Use them to reassign -999s as max stat value - this keeps -999 from affection the scaling
     modelfrom[modelfrommask] = (np.ones_like(modelfrom)*np.max(modelfrom,(0,1)))[modelfrommask]
     predictfrom[predictfrommask] = (np.ones_like(predictfrom)*np.max(predictfrom,(0,1)))[predictfrommask]
     
@@ -276,9 +338,10 @@ def modelrun(modelfrom, predictfrom):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
-    # Returning sequnces allows me to add "hidden" LSTM layers
-    model.add(LSTM(8, return_sequences=True))
-    model.add(LSTM(8))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
     model.add(Dense(train_ind.shape[1]))
@@ -290,14 +353,7 @@ def modelrun(modelfrom, predictfrom):
     # train network
     history = model.fit(train_ind, train_resp, epochs=50, batch_size=5, validation_data=(test_ind, test_resp),verbose=0, shuffle=False)
 
-    # plot history    
-    plt.plot(history.history['loss'], label='train')
-    plt.plot(history.history['val_loss'], label='test')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.show()
-    
+
     # Make a prediction:    
     predicted_resp = model.predict(predictfrom_ind)
     
@@ -322,97 +378,25 @@ def modelrun(modelfrom, predictfrom):
     # Return results (predicted responding variables):
     return inv_predicted_resp
 
+
 #%% Run iterations:
-#del(result)
-numiters = 10
-fig = plt.figure(figsize=(5,5))
-plt.clf()
+
+numiters = 2
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
-        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom), axis=2)
+        result = np.expand_dims(modelrun(modelarrayfrom, predictarrayfrom), axis=2)
     else:
-        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom), axis=2)),axis=2)
-        
-    
+        result = np.concatenate((result,np.expand_dims(modelrun(modelarrayfrom, predictarrayfrom), axis=2)),axis=2)
 
-#%% Evaluate performance:
-
-# Retrieve the responding variables for predictarrayfrom
-actual = predictarrayfrom[:,0,-1]
-
-# Find the mask
-resultmask = np.ma.masked_less(result,1).mask
-
-# result.shape = [player, lag, iteration]
-
-## Create an empty array for the RMSE results
-## The first dimension is the lag, and the second is the run realization
-#RMSEs = np.empty((result.shape[1],result.shape[2]))
-#
-#for iteration in range(result.shape[2]):
-#    for lag in range(result.shape[1]):
-#        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
+#%% FIGURE OUT WHAT TO SAVE - PROBABLY A NUMPY ARRAY OF ALL PREDICTIONS
 
 
-# Create an alternate measure of error: use mean of the lags for each player
-# as the prediction. Calculate the RMSE of these means.         
-RMSEmeans =np.empty((result.shape[2]))
-
-meanresult = np.zeros((result.shape[0],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
-    
-    RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
-
-# For convenience, capture these errors in a single array. First columns are
-# the RMSEs for each lag, followed by the mean of errors for all lags,
-# then the error of the mean estimates for all lags.
-#RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
-
-# For now, I think the best representation of the error is the RMSE for
-# the mean of the the lag estimates. Report this as error.
-error = np.mean(RMSEmeans)
-
-print("Overall error: " + str(error))
-
-#np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo64_batch25.npy',result)
-
-#%% Compile this result into an array that tracks the error
-
-if 'RMSEmeansCOMP' in globals():
-    RMSEmeansCOMP = np.concatenate((RMSEmeansCOMP, np.expand_dims(RMSEmeans,axis=1)),axis=1)
-else:
-    RMSEmeansCOMP = np.expand_dims(RMSEmeans,axis=1)
+np.save('20182019_points_L04N06E50B05.npy',result)
 
 
 
 
-#%%
-fig4 = plt.figure(figsize=(5,5))
-az = fig4.add_subplot(1,1,1)
-az.scatter(actual,np.mean(meanresult, axis=1),c="b", s=10)
-#az.scatter(actual,np.mean(result[:,0,:][~resultmask[:,0,0]], axis=1),c="b", s=12)
-#az.scatter(actual[~resultmask[:,1,0]],np.mean(result[:,1,:][~resultmask[:,1,0]], axis=1),c="r", s=12)
-#az.scatter(actual[~resultmask[:,2,0]],np.mean(result[:,2,:][~resultmask[:,2,0]], axis=1),c="g", s=12)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Actual vs. Predicted', fontsize=16)
-plt.grid(True)
 
 
-#%% Create a boxplot of results
-
-fig = plt.figure(figsize=(5,5))
-
-ax = fig.add_subplot(1,1,1)
-ax.boxplot(RMSEmeansCOMP)
-plt.xlabel('Hidden Layers')
-plt.ylabel('Error')
-plt.title('Error for Hidden LSTM Layers (10 iterations)', fontsize=16)
 

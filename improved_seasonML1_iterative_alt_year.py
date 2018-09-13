@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 
 import datetime
-from scipy import stats
 
 
 #%%
@@ -40,7 +39,7 @@ with conn:
     # scored more than 50 points in a season):
     cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 50 \
                 AND playerPositionCode IN ('C', 'F', 'L', 'R') \
-                AND seasonID NOT IN (20172018)")
+                AND seasonID NOT IN (20182019)")
     
     # Put selected playerIds in an array (playerId is a unique identifier)
     data = np.array(cur.fetchall())
@@ -82,7 +81,7 @@ def extractlag(player, stat4lag, lag ):
         # Notice that the stats extracted are hard-coded...
         cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed \
                     FROM s_skater_summary \
-                    WHERE seasonId NOT IN (20172018) \
+                    WHERE seasonId NOT IN (20182019) \
                     AND playerId=?", [player])
 
         data = cur.fetchall()
@@ -192,17 +191,17 @@ lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePer
 #%% Separate training from target data
 
 # predict from the 20152016 season (lag = 1)
-lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
+lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
 # model from the remaining seasons
-lag1model = lagged1.loc[lagged1['year'] != 20152016]
+lag1model = lagged1.loc[lagged1['year'] != 20162017]
 
 # predict from the 20142015 season (lag = 2)
-lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
+lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
 # model from the remaining seasons
-lag2model = lagged2.loc[lagged1['year'] != 20152016]
+lag2model = lagged2.loc[lagged1['year'] != 20162017]
 
-lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
-lag3model = lagged3.loc[lagged1['year'] != 20152016]
+lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
+lag3model = lagged3.loc[lagged1['year'] != 20162017]
 
 
 
@@ -280,6 +279,7 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with neurons
+    model.add(LSTM(nrons, return_sequences=True))
     model.add(LSTM(nrons))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
@@ -324,18 +324,16 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     # Return results (predicted responding variables):
     return inv_predicted_resp
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 #%% Run iterations:
 #del(result)
 numiters = 10
-
-neurons = 16
-epochs = 50
-batchsize = 5
-
 #fig = plt.figure(figsize=(5,5))
 #plt.clf()
+
+neurons = 8
+epochs = 25
+batchsize = 5
+
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
@@ -344,26 +342,6 @@ for i in range(numiters):
         result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
         
     
-=======
-=======
->>>>>>> origin/iterate_for_hyperPs
-##%% Run iterations:
-##del(result)
-#numiters = 15
-##fig = plt.figure(figsize=(5,5))
-##plt.clf()
-#for i in range(numiters):
-#    print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
-#    if i == 0:
-#        result = np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)
-#    else:
-#        result = np.concatenate((result,np.expand_dims(modelrun(modelarrrayfrom, predictarrayfrom, neurons, epochs, batchsize), axis=2)),axis=2)
-#        
-#    
-<<<<<<< HEAD
->>>>>>> origin/iterate_for_hyperPs
-=======
->>>>>>> origin/iterate_for_hyperPs
 #%% To search for hyperparameters
 
 # define some things to evaluate results:
@@ -417,17 +395,17 @@ def hpsearch(modelfrom, predictfrom, modeliter, nrons, epch, bsize):
 #%% Test the hyperparameters:
 
 # List the HPs to test
-neuronlist = [4,6,8,12,16]
-epochlist = [15,20,30,50]
-batchlist = [5,10,25,50]
+neuronlist = [8]
+epochlist = [25]
+batchlist = [15] 
     
 print("Start time:",datetime.datetime.time(datetime.datetime.now()))
 
-result = hpsearch(modelarrrayfrom, predictarrayfrom, 10, neuronlist, epochlist, batchlist)
+result = hpsearch(modelarrrayfrom, predictarrayfrom, 7, neuronlist, epochlist, batchlist)
         
-print("Start time:",datetime.datetime.time(datetime.datetime.now()))        
+print("End time:",datetime.datetime.time(datetime.datetime.now()))     
         
-np.save('HPsearch.npy',result)
+
 
 #%% Plot HP testing results in 3D
 
@@ -438,17 +416,15 @@ ax = plt.axes(projection='3d')
 xdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(neuronlist,1),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
 ydata = np.ndarray.flatten(np.expand_dims(np.expand_dims(epochlist,0),2)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
 zdata = np.ndarray.flatten(np.expand_dims(np.expand_dims(batchlist,0),0)*np.ones((len(neuronlist), len(epochlist), len(batchlist))))
-im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), vmin=15.5, vmax=16.75, cmap='viridis_r', s=1000*(16.75-np.ndarray.flatten(result)));
+im = ax.scatter3D(xdata, ydata, zdata, c=np.ndarray.flatten(result), cmap='viridis', s=1000*(17-np.ndarray.flatten(result)))
 # Add a colorbar
-cbar = fig.colorbar(im, ax=ax)
-cbar.set_label('Error')
+fig.colorbar(im, ax=ax)
+
 ax.set_xlabel('Neurons')
 ax.set_ylabel('Epochs')
 ax.set_zlabel('Batch')
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 b = np.load('HPtestONE.npy')
 im = ax.scatter3D(b[:,0], ydata[:,1], zdata[:,2], c=b[:,3], cmap='viridis', s=1000*(17-b[:,3]))
 
@@ -475,6 +451,17 @@ actual = predictarrayfrom[:,0,-1]
 # Find the mask
 resultmask = np.ma.masked_less(result,1).mask
 
+# result.shape = [player, lag, iteration]
+
+## Create an empty array for the RMSE results
+## The first dimension is the lag, and the second is the run realization
+#RMSEs = np.empty((result.shape[1],result.shape[2]))
+#
+#for iteration in range(result.shape[2]):
+#    for lag in range(result.shape[1]):
+#        RMSEs[lag,iteration] = np.sqrt(mean_squared_error(result[:,lag,iteration][~resultmask[:,lag,0]], actual[~resultmask[:,lag,0]]))
+
+
 # Create an alternate measure of error: use mean of the lags for each player
 # as the prediction. Calculate the RMSE of these means.         
 RMSEmeans =np.empty((result.shape[2]))
@@ -486,6 +473,11 @@ for iteration in range(result.shape[2]):
         meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
     
     RMSEmeans[iteration] = np.sqrt(mean_squared_error(meanresult[:,iteration],actual))
+
+# For convenience, capture these errors in a single array. First columns are
+# the RMSEs for each lag, followed by the mean of errors for all lags,
+# then the error of the mean estimates for all lags.
+#RMSEall = np.concatenate((RMSEs,np.expand_dims(np.mean(RMSEs,axis=0),axis=1).T,np.expand_dims(RMSEmeans,axis=1).T),axis=0)
 
 # For now, I think the best representation of the error is the RMSE for
 # the mean of the the lag estimates. Report this as error.
@@ -506,78 +498,4 @@ plt.title('Actual vs. Predicted', fontsize=16)
 plt.grid(True)
 plt.text(10,85,str('RMSE = '+str(round(float(error),2))),fontsize=16)
 
-
-#%% Try using percentile as an error? Should give an indication of the relative
-# ranking, which is what we're really after...
-
-# for a set of results, transform the predicted score into a percentile
-# Retrieve the responding variables for predictarrayfrom
-actual = predictarrayfrom[:,0,-1]
-
-# Find the mask
-resultmask = np.ma.masked_less(result,1).mask
-
-# Create an alternate measure of error: use mean of the lags for each player      
-
-meanresult = np.zeros((result.shape[0],result.shape[2]))
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresult[player,iteration] = np.mean(result[player,:,iteration][np.ma.masked_greater(result[player,:,iteration],2).mask])
-    
-meanresultpercentile = np.zeros_like(meanresult)
-
-for iteration in range(result.shape[2]):
-    for player in range(result.shape[0]):
-        meanresultpercentile[player,iteration] = stats.percentileofscore(meanresult[:,iteration], meanresult[player,iteration])
-
-# for the actual results, transform them into percentiles
-actualpercentile = np.zeros_like(actual)
-
-for player in range(actual.shape[0]):
-    actualpercentile[player] = stats.percentileofscore(actual,actual[player])
-
-# calculate the RMSE of the percentiles
-RMSEpercentiles = np.empty((result.shape[2]))
-
-
-for iteration in range(result.shape[2]):
-    RMSEpercentiles[iteration] = np.sqrt(mean_squared_error(meanresultpercentile[:,iteration],actualpercentile))
-
-
-errorpercentile = np.mean(RMSEpercentiles)
-
-# plot the predicted and actual percentiles
-# plot one realizaiton
-
-
-fig = plt.figure(figsize=(10,5))
-az = fig.add_subplot(1,2,1)
-#az.scatter(actualpercentile,np.mean(meanresult, axis=1),c="b", s=10)
-az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Performance Percentile: \n One Realization', fontsize=16)
-plt.grid(True)
-plt.text(5,95,str('RMSE = '+str(round(float(RMSEpercentiles[0]),2))),fontsize=16)
-
-az = fig.add_subplot(1,2,2)
-az.scatter(actualpercentile,np.mean(meanresultpercentile, axis=1),c="b", s=10)
-#az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Performance Percentile: \n Mean of Realizations', fontsize=16)
-plt.grid(True)
-plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)
-=======
-
->>>>>>> origin/iterate_for_hyperPs
-=======
-
->>>>>>> origin/iterate_for_hyperPs
+#np.save('./results/LAG3_POINTS50/LSTM8-MSE_ADAM-epo64_batch25.npy',result)

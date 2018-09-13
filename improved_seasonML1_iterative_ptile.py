@@ -40,7 +40,7 @@ with conn:
     # scored more than 50 points in a season):
     cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 50 \
                 AND playerPositionCode IN ('C', 'F', 'L', 'R') \
-                AND seasonID NOT IN (20172018)")
+                AND seasonID NOT IN (20182019)")
     
     # Put selected playerIds in an array (playerId is a unique identifier)
     data = np.array(cur.fetchall())
@@ -82,7 +82,7 @@ def extractlag(player, stat4lag, lag ):
         # Notice that the stats extracted are hard-coded...
         cur.execute("SELECT seasonId, points, goals, ppPoints, shots, timeOnIcePerGame, assists, gamesplayed \
                     FROM s_skater_summary \
-                    WHERE seasonId NOT IN (20172018) \
+                    WHERE seasonId NOT IN (20182019) \
                     AND playerId=?", [player])
 
         data = cur.fetchall()
@@ -191,18 +191,32 @@ lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePer
 
 #%% Separate training from target data
 
+## predict from the 20152016 season (lag = 1)
+#lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
+## model from the remaining seasons
+#lag1model = lagged1.loc[lagged1['year'] != 20152016]
+#
+## predict from the 20142015 season (lag = 2)
+#lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
+## model from the remaining seasons
+#lag2model = lagged2.loc[lagged1['year'] != 20152016]
+#
+#lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
+#lag3model = lagged3.loc[lagged1['year'] != 20152016]
+
 # predict from the 20152016 season (lag = 1)
-lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
+lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
 # model from the remaining seasons
-lag1model = lagged1.loc[lagged1['year'] != 20152016]
+lag1model = lagged1.loc[lagged1['year'] != 20162017]
 
 # predict from the 20142015 season (lag = 2)
-lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
+lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
 # model from the remaining seasons
-lag2model = lagged2.loc[lagged1['year'] != 20152016]
+lag2model = lagged2.loc[lagged1['year'] != 20162017]
 
-lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
-lag3model = lagged3.loc[lagged1['year'] != 20152016]
+lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
+lag3model = lagged3.loc[lagged1['year'] != 20162017]
+
 
 
 
@@ -280,6 +294,10 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM with neurons
+#    model.add(LSTM(nrons, return_sequences=True))
+#    model.add(LSTM(nrons, return_sequences=True))
+#    model.add(LSTM(nrons, return_sequences=True))
+
     model.add(LSTM(nrons))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
@@ -478,7 +496,8 @@ plt.ylim(-5,110)
 plt.xlim(-5,110)
 plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
-plt.title('Actual vs. Predicted', fontsize=16)
+
+plt.title('20172018 L01N16E50B05', fontsize=16)
 plt.grid(True)
 plt.text(10,85,str('RMSE = '+str(round(float(error),2))),fontsize=16)
 
@@ -527,20 +546,10 @@ errorpercentile = np.mean(RMSEpercentiles)
 # plot one realizaiton
 
 
-fig = plt.figure(figsize=(10,5))
-az = fig.add_subplot(1,2,1)
-#az.scatter(actualpercentile,np.mean(meanresult, axis=1),c="b", s=10)
-az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
-az.plot([0,50,120],[0,50,120])
-plt.ylim(-5,110)
-plt.xlim(-5,110)
-plt.xlabel('Actual Results')
-plt.ylabel('Predicted Results')
-plt.title('Performance Percentile: \n One Realization', fontsize=16)
-plt.grid(True)
-plt.text(5,95,str('RMSE = '+str(round(float(RMSEpercentiles[0]),2))),fontsize=16)
+fig = plt.figure(figsize=(5,5))
 
-az = fig.add_subplot(1,2,2)
+az = fig.add_subplot(1,1,1)
+
 az.scatter(actualpercentile,np.mean(meanresultpercentile, axis=1),c="b", s=10)
 #az.scatter(actualpercentile,meanresultpercentile[:,0],c="b", s=10)
 az.plot([0,50,120],[0,50,120])
@@ -548,6 +557,8 @@ plt.ylim(-5,110)
 plt.xlim(-5,110)
 plt.xlabel('Actual Results')
 plt.ylabel('Predicted Results')
-plt.title('Performance Percentile: \n Mean of Realizations', fontsize=16)
+
+plt.title('20172018 Percentile L01N16E50B05', fontsize=16)
+
 plt.grid(True)
 plt.text(5,95,str('RMSE = '+str(round(float(errorpercentile),2))),fontsize=16)
