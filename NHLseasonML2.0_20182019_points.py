@@ -7,11 +7,11 @@ Production Version
 Predict the points NHL players will accumulate in the 20182019 season.
 Key parameters used for this machine learning algorithm:
     3 years of lag
-    5 Hidden Layers of Neurons
+    6 Layers of Neurons
     6 Neurons in each layer
     50 Epochs
     Batch size of 5
-    100 Realizations simulated
+    80 Realizations simulated
     Forecast for players who have scored 35 points in a season
 It's worth noting that this algo has been stripped down to some degree. Some
 functionality used in development has been removed.
@@ -406,7 +406,8 @@ def modelrun(modelfrom, predictfrom):
     # Inform algorithm that 0 represents non-values (values of -1 were scaled to 0!)
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
-    # Define as LSTM with 8 neurons - not optimized - use 8 because I have 8 statistical categories
+    # Define as LSTM
+    model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6, return_sequences=True))
@@ -451,7 +452,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 
-numiters = 100
+numiters = 80
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
@@ -462,6 +463,6 @@ for i in range(numiters):
 #%% FIGURE OUT WHAT TO SAVE - PROBABLY A NUMPY ARRAY OF ALL PREDICTIONS
 
 
-np.save('20182019_points_L05N06E50B05.npy',result)
+np.save('20182019_points_L06N06E50B05.npy',result)
 
 
