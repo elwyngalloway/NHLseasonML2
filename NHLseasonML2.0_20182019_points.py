@@ -2,24 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Sep 11 21:36:03 2018
-
 NHLseasonML 2.0 - Predicting 20182019 Points
 Production Version
-
 Predict the points NHL players will accumulate in the 20182019 season.
-
 Key parameters used for this machine learning algorithm:
     3 years of lag
-    XXXX Hidden Layers of Neurons
-    XXXX Neurons in each layer
-    XXXX Epochs
-    Batch size of XXXX
-    XXXX Realizations simulated
-    Forecast for players who have scored XXXX points in a season
-
+    5 Hidden Layers of Neurons
+    6 Neurons in each layer
+    50 Epochs
+    Batch size of 5
+    100 Realizations simulated
+    Forecast for players who have scored 35 points in a season
 It's worth noting that this algo has been stripped down to some degree. Some
 functionality used in development has been removed.
-
 @author: Galloway
 """
 
@@ -50,7 +45,7 @@ with conn:
     # scored more than 30 points in a season):
 
 
-    cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 30 \
+    cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 35 \
                 AND playerPositionCode IN ('C', 'D', 'L', 'R') \
                 AND seasonID NOT IN (20182019) ") #should be none for 20182019 anyway
     
@@ -80,8 +75,6 @@ def extractlag(player, stat4lag, lag ):
     stat4lag = name of stat to be lagged (string)
     
     lag = integer value for lagging (must be positive)
-
-
     """
 
     db_name = "NHLseasonML_seasonstats.db"
@@ -170,7 +163,6 @@ def extractlag(player, stat4lag, lag ):
 def extractlagprediction(player, stat4lag, lag ):
     """
     Similar to extractlag, except that it's to create the array to predict from.
-
     """
 
     db_name = "NHLseasonML_seasonstats.db"
@@ -278,27 +270,15 @@ for player in players:
 # Check that the shapes of the three arrays are identical:
 print(lagged1.shape,lagged2.shape,lagged3.shape)
 
-## Convert these arrays into dataframes for convenience later...
-#lagged1 = pd.DataFrame(lagged1)
-#lagged1 = lagged1.rename(index=str, columns={0: 'year'})
-#
-#lagged2 = pd.DataFrame(lagged2)
-#lagged2 = lagged2.rename(index=str, columns={0: 'year'})
-#
-#lagged3 = pd.DataFrame(lagged3)
-#lagged3 = lagged3.rename(index=str, columns={0: 'year'})
+
 
 #%% 
 """
 This section is different than the testing version.
-
 Each player's most recent season has been eliminated (don't worry... their
 production for that season still remains as a lagged variable).
-
 This production version of the algo must retrieve the data for predictions
 from the database.
-
-
 """
 
 # Compile training data
@@ -471,7 +451,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 
-numiters = 2
+numiters = 100
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
@@ -483,10 +463,5 @@ for i in range(numiters):
 
 
 np.save('20182019_points_L05N06E50B05.npy',result)
-
-
-
-
-
 
 
