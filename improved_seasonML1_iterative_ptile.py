@@ -438,8 +438,8 @@ def hpsearch(modelfrom, predictfrom, modeliter, hlayers, nrons, epch, bsize):
 #%% Test the hyperparameters:
 
 # List the HPs to test
-hiddenlayerlist = [7]
-neuronlist = [4]
+hiddenlayerlist = [5,6,7,8]
+neuronlist = [3,4,6]
 epochlist = [50]
 batchlist = [5]
     
@@ -472,22 +472,22 @@ np.save('HPsearch_multi_layer.npy',result)
 #%% Plot HP testing results in 3D for CONSTANT EPOCHS & BATCHSIZE
 
 
-#fig, ax = plt.subplots()
-#
-## Data for three-dimensional scattered points
-#xdata = np.ndarray.flatten(np.expand_dims(neuronlist,0)*np.ones((len(neuronlist), len(hiddenlayerlist))))
-#ydata = np.ndarray.flatten(np.expand_dims(hiddenlayerlist,1)*np.ones((len(neuronlist), len(hiddenlayerlist))))
-#
-#im = ax.scatter(xdata, ydata, c=np.ndarray.flatten(result[:,:,0,0]), cmap='viridis_r',vmin=25, vmax=28,  s=500*(28-np.ndarray.flatten(result)));
-## Add a colorbar
-#cbar = fig.colorbar(im, ax=ax)
-#cbar.set_label('Error')
-#ax.set_xlabel('Neurons')
-#ax.set_ylabel('Hidden Layers')
-#ax.set_title('HP Search: 20162017 Alt Stats')
+fig, ax = plt.subplots()
+
+# Data for three-dimensional scattered points
+xdata = np.ndarray.flatten(np.expand_dims(neuronlist,0)*np.ones((len(hiddenlayerlist), len(neuronlist))))
+ydata = np.ndarray.flatten(np.expand_dims(hiddenlayerlist,1)*np.ones((len(hiddenlayerlist), len(neuronlist))))
+
+im = ax.scatter(xdata, ydata, c=np.ndarray.flatten(result[:,:,0,0]), cmap='viridis_r',vmin=25, vmax=28,  s=500*(28-np.ndarray.flatten(result)));
+# Add a colorbar
+cbar = fig.colorbar(im, ax=ax)
+cbar.set_label('Error')
+ax.set_xlabel('Neurons')
+ax.set_ylabel('Hidden Layers')
+ax.set_title('HP Search: 20162017 Alt Stats')
 #ax.set_xlim([3,15.5])
 #ax.set_ylim([-0.5,7.5])
-#
-#plt.show()
+
+plt.show()
 
 
