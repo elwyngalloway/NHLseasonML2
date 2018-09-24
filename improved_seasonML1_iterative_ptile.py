@@ -40,7 +40,7 @@ with conn:
     # scored more than 50 points in a season):
     cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 50 \
                 AND playerPositionCode IN ('C', 'F', 'L', 'R') \
-                AND seasonID NOT IN (20182019)")
+                AND seasonID NOT IN (20172018)")
     
     # Put selected playerIds in an array (playerId is a unique identifier)
     data = np.array(cur.fetchall())
@@ -191,31 +191,31 @@ lagged3.columns = ('year', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePer
 
 #%% Separate training from target data
 
-## predict from the 20152016 season (lag = 1)
-#lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
-## model from the remaining seasons
-#lag1model = lagged1.loc[lagged1['year'] != 20152016]
-#
-## predict from the 20142015 season (lag = 2)
-#lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
-## model from the remaining seasons
-#lag2model = lagged2.loc[lagged1['year'] != 20152016]
-#
-#lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
-#lag3model = lagged3.loc[lagged1['year'] != 20152016]
-
 # predict from the 20152016 season (lag = 1)
-lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
+lag1predictfrom = lagged1.loc[lagged1['year'] == 20152016]
 # model from the remaining seasons
-lag1model = lagged1.loc[lagged1['year'] != 20162017]
+lag1model = lagged1.loc[lagged1['year'] != 20152016]
 
 # predict from the 20142015 season (lag = 2)
-lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
+lag2predictfrom = lagged2.loc[lagged1['year'] == 20152016] # the rows of interest are in the same position as those in lagged1
 # model from the remaining seasons
-lag2model = lagged2.loc[lagged1['year'] != 20162017]
+lag2model = lagged2.loc[lagged1['year'] != 20152016]
 
-lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
-lag3model = lagged3.loc[lagged1['year'] != 20162017]
+lag3predictfrom = lagged3.loc[lagged1['year'] == 20152016]
+lag3model = lagged3.loc[lagged1['year'] != 20152016]
+
+## predict from the 20152016 season (lag = 1)
+#lag1predictfrom = lagged1.loc[lagged1['year'] == 20162017]
+## model from the remaining seasons
+#lag1model = lagged1.loc[lagged1['year'] != 20162017]
+#
+## predict from the 20142015 season (lag = 2)
+#lag2predictfrom = lagged2.loc[lagged1['year'] == 20162017] # the rows of interest are in the same position as those in lagged1
+## model from the remaining seasons
+#lag2model = lagged2.loc[lagged1['year'] != 20162017]
+#
+#lag3predictfrom = lagged3.loc[lagged1['year'] == 20162017]
+#lag3model = lagged3.loc[lagged1['year'] != 20162017]
 
 
 
@@ -266,6 +266,9 @@ def modelrun(modelfrom, predictfrom, nrons, epchs, bsize):
     # Return the missing values to -999
     modelfrom[modelfrommask] = -999
     predictfrom[predictfrommask] = -999
+    
+#    modelfrom_scaled[modelfrommask] = -999
+#    predictfrom_scaled[predictfrommask] = -999
     
     
     

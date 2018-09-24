@@ -45,8 +45,8 @@ with conn:
     # scored more than 30 points in a season):
 
 
-    cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 35 \
-                AND playerPositionCode IN ('C', 'D', 'L', 'R') \
+    cur.execute("SELECT playerId FROM s_skater_summary WHERE points > 50 \
+                AND playerPositionCode IN ('C', 'F', 'L', 'R') \
                 AND seasonID NOT IN (20182019) ") #should be none for 20182019 anyway
     
     
@@ -343,7 +343,6 @@ predictarrayfrom = np.transpose(np.dstack((lag1predictfrom, \
 
 predictarrayfrom[np.isnan(predictarrayfrom)]=-999
 
-
 #%% Let's harness things from here on. Define a function that separates the
 #   data into training and testing sets; trains the model; predicts; evaluates
 #   prediction quality
@@ -354,10 +353,6 @@ def modelrun(modelfrom, predictfrom):
     """
     
     """
-    
-    # Different for this production version: add values to lagged points of
-    # predict from array to replace the -999s.
-    predictfrom[:,:,-1] = modelfrom[:predictfrom.shape[0],:,-1]
     
     # We need to address the missing values (-999s) before scaling.
     # Create masks of the modelfrom and predictfrom
@@ -416,7 +411,7 @@ def modelrun(modelfrom, predictfrom):
 #    model.add(LSTM(6, return_sequences=True))
 #    model.add(LSTM(6, return_sequences=True))
 #    model.add(LSTM(6, return_sequences=True))
-#    model.add(LSTM(6, return_sequences=True))
+    model.add(LSTM(6, return_sequences=True))
     model.add(LSTM(6))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
@@ -457,7 +452,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 
-numiters = 5
+numiters = 2
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
@@ -465,23 +460,9 @@ for i in range(numiters):
     else:
         result = np.concatenate((result,np.expand_dims(modelrun(modelarrayfrom, predictarrayfrom), axis=2)),axis=2)
 
-#%% Calculate P10 P50 P90 values for each player prediction
-        
-resultP = np.empty((result.shape[0], 3)) # create a result array [(player),(P10/P50/P90)]
-
-for player in range(result.shape[0]):
-    resultP[player] = [np.percentile(result[player][np.ma.masked_greater(result[player],2).mask], 10),
-           np.percentile(result[player][np.ma.masked_greater(result[player],2).mask], 50),
-           np.percentile(result[player][np.ma.masked_greater(result[player],2).mask], 90)]
+#%% FIGURE OUT WHAT TO SAVE - PROBABLY A NUMPY ARRAY OF ALL PREDICTIONS
 
 
-
-#%% Save the results
-
-# to save the full prediction
-#np.save('20182019_points_L06N06E50B05.npy',result)
-    
-# to save the probabilistic summary of the results:
-np.save('20182019_points_P10P50P90_L06N06E50B05.npy',resultP)
+np.save('20182019_points_L06N06E50B05_test.npy',result)
 
 

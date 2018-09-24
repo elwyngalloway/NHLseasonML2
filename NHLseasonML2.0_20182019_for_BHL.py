@@ -92,17 +92,35 @@ def extractlag(player, stats4lag, lag ):
         # I want to retrieve stats for a season, plus age, draft position,
         # position code (categorical!), name?
         cur.execute("SELECT DISTINCT s_skater_summary.seasonId, \
-                    s_skater_summary.playerId, s_bio_info.playerBirthDate, \
-                    s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
-                    s_skater_summary.points, s_skater_summary.goals, s_skater_summary.ppPoints, \
-                    s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
-                    s_skater_summary.assists, s_skater_summary.gamesplayed \
-                    FROM s_skater_summary \
-                    INNER JOIN s_bio_info \
-                        ON s_bio_info.playerId = s_skater_summary.playerId \
-                        AND s_bio_info.seasonId = s_skater_summary.seasonId \
-                    WHERE s_skater_summary.playerID = ? \
-                    AND s_skater_summary.seasonId NOT IN (20182019)", [player])
+                s_skater_summary.playerId, s_bio_info.playerBirthDate, \
+                s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
+                s_skater_summary.assists, s_skater_summary.goals, \
+                s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
+                s_skater_summary.gamesplayed, \
+                s_skater_summary.plusMinus, \
+                s_time_on_ice.ppTimeOnIcePerGame, s_time_on_ice.shTimeOnIcePerGame, \
+                s_time_on_ice.evTimeOnIcePerGame, \
+                s_skater_points.evAssists, s_skater_points.ppAssists, \
+                s_skater_goals.enGoals, s_skater_goals.ppGoals, s_skater_goals.evGoals, \
+                s_realtime_events.blockedShots, s_realtime_events.hitsPerGame \
+                FROM s_skater_summary \
+                INNER JOIN s_bio_info \
+                    ON s_bio_info.playerId = s_skater_summary.playerId \
+                    AND s_bio_info.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_time_on_ice \
+                    ON s_time_on_ice.playerId = s_skater_summary.playerId \
+                    AND s_time_on_ice.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_skater_points \
+                    ON s_skater_points.playerId = s_skater_summary.playerId \
+                    AND s_skater_points.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_skater_goals \
+                    ON s_skater_goals.playerId = s_skater_summary.playerId \
+                    AND s_skater_goals.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_realtime_events \
+                    ON s_realtime_events.playerId = s_skater_summary.playerId \
+                    AND s_realtime_events.seasonId = s_skater_summary.seasonId \
+                WHERE s_skater_summary.playerID = ? \
+                AND s_skater_summary.seasonId NOT IN (20182019)", [player])
         
         
 
@@ -114,7 +132,11 @@ def extractlag(player, stats4lag, lag ):
         df = pd.DataFrame(data)
 
         # name the columns of df
-        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position',
+                      'assists', 'goals',
+                      'shots', 'ToipG', 'games', 'plusMinus', 'ppToipG',
+                      'shToipG', 'evToipG', 'evAssists', 'ppAssists', 'enGoals',
+                      'ppGoals', 'evGoals', 'blocks', 'hitsPerGame')
         # transform birth date to just birth year, then transform to age, then rename column
         df['birthYear'] = pd.to_datetime(df['birthYear']).dt.year
         df['birthYear'] = df['year'] // 10000 - df['birthYear']
@@ -145,7 +167,9 @@ def extractlag(player, stats4lag, lag ):
             columnindex = df.columns.get_loc(stat)
 
             # append the appropriate column of the shifted df to the end of the original df
-            df = df.join(dfshift.iloc[:,columnindex]).iloc[lag:,:]
+            df = df.join(dfshift.iloc[:,columnindex])
+            
+        df = df.iloc[lag:,:]
         
         #return df # may consider changing to return an array
         return np.array(df)
@@ -154,14 +178,17 @@ def extractlag(player, stats4lag, lag ):
     else: # return NaNs of appropriate shape in case no data is retreived from database
         
         # create an empty array
-        temp = np.empty((1,16))
+        temp = np.empty((1,29))
         # fill it with NaNs
         temp.fill(np.nan)
         # convert to a Dataframe
         df = pd.DataFrame(temp)
-        # name these columns to match typical output
-        df.columns = ('year', 'playerID', 'age','draftPos', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'position_C', 'position_D', 'position_L', 'position_R', str(stat4lag + 'lag'))
-        
+        # name these columns to match typical output 
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position_C', 'position_D',
+                      'position_L', 'position_R', 'assists', 'goals',
+                      'shots', 'ToipG', 'games', 'plusMinus', 'ppToipG',
+                      'shToipG', 'evToipG', 'evAssists', 'ppAssists', 'enGoals',
+                      'ppGoals', 'evGoals', 'blocks', 'hitsPerGame')
         #return df
         return np.array(df)
         #return df
@@ -181,25 +208,46 @@ def extractlagprediction(player, stats4lag, lag ):
         cur = conn.cursor()
         
         cur.execute("SELECT DISTINCT s_skater_summary.seasonId, \
-                    s_skater_summary.playerId, s_bio_info.playerBirthDate, \
-                    s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
-                    s_skater_summary.points, s_skater_summary.goals, s_skater_summary.ppPoints, \
-                    s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
-                    s_skater_summary.assists, s_skater_summary.gamesplayed \
-                    FROM s_skater_summary \
-                    INNER JOIN s_bio_info \
-                        ON s_bio_info.playerId = s_skater_summary.playerId \
-                        AND s_bio_info.seasonId = s_skater_summary.seasonId \
-                    WHERE s_skater_summary.playerID = ? \
-                    AND s_skater_summary.seasonId NOT IN (20182019)", [player])
-
-        data = cur.fetchall()
+                s_skater_summary.playerId, s_bio_info.playerBirthDate, \
+                s_bio_info.playerDraftOverallPickNo, s_skater_summary.playerPositionCode, \
+                s_skater_summary.assists, s_skater_summary.goals, \
+                s_skater_summary.shots, s_skater_summary.timeOnIcePerGame, \
+                s_skater_summary.gamesplayed, \
+                s_skater_summary.plusMinus, \
+                s_time_on_ice.ppTimeOnIcePerGame, s_time_on_ice.shTimeOnIcePerGame, \
+                s_time_on_ice.evTimeOnIcePerGame, \
+                s_skater_points.evAssists, s_skater_points.ppAssists, \
+                s_skater_goals.enGoals, s_skater_goals.ppGoals, s_skater_goals.evGoals, \
+                s_realtime_events.blockedShots, s_realtime_events.hitsPerGame \
+                FROM s_skater_summary \
+                INNER JOIN s_bio_info \
+                    ON s_bio_info.playerId = s_skater_summary.playerId \
+                    AND s_bio_info.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_time_on_ice \
+                    ON s_time_on_ice.playerId = s_skater_summary.playerId \
+                    AND s_time_on_ice.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_skater_points \
+                    ON s_skater_points.playerId = s_skater_summary.playerId \
+                    AND s_skater_points.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_skater_goals \
+                    ON s_skater_goals.playerId = s_skater_summary.playerId \
+                    AND s_skater_goals.seasonId = s_skater_summary.seasonId \
+                INNER JOIN s_realtime_events \
+                    ON s_realtime_events.playerId = s_skater_summary.playerId \
+                    AND s_realtime_events.seasonId = s_skater_summary.seasonId \
+                WHERE s_skater_summary.playerID = ? \
+                AND s_skater_summary.seasonId NOT IN (20182019)", [player])
+    
+        data = cur.fetchall()    
     
     if len(data) > 0:
 
         df = pd.DataFrame(data)
 
-        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games')
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position',
+                      'assists', 'goals',
+                      'shots', 'ToipG', 'games', 'plusMinus', 'ppToipG',
+                      'shToipG', 'evToipG', 'evAssists', 'ppAssists', 'enGoals', 'ppGoals', 'evGoals', 'blocks', 'hitsPerGame')
         df['birthYear'] = pd.to_datetime(df['birthYear']).dt.year
         df['birthYear'] = df['year'] // 10000 - df['birthYear']
         df = df.rename(index=str, columns={'birthYear': 'age'})
@@ -221,16 +269,21 @@ def extractlagprediction(player, stats4lag, lag ):
             columnindex = df.columns.get_loc(stat)
 
             # append the appropriate column of the shifted df to the end of the original df
-            df = df.join(dfshift.iloc[:,columnindex]).iloc[lag-1:,:]  # This line is distinct from the extractlag
+            df = df.join(dfshift.iloc[:,columnindex])
+            
+        df = df.iloc[lag-1:,:]  # This line is distinct from the extractlag
         
         return np.array(df)
 
     
     else:
-        temp = np.empty((1,16))
+        temp = np.empty((1,29))
         temp.fill(np.nan)
         df = pd.DataFrame(temp)
-        df.columns = ('year', 'playerID', 'age','draftPos', 'points', 'goals', 'ppPoints', 'shots', 'timeOnIcePerGame', 'assists', 'games', 'position_C', 'position_D', 'position_L', 'position_R', str(stat4lag + 'lag'))
+        df.columns = ('year', 'playerID', 'birthYear','draftPos', 'position_C', 'position_D',
+                      'position_L', 'position_R', 'assists', 'goals',
+                      'shots', 'ToipG', 'games', 'plusMinus', 'ppToipG',
+                      'shToipG', 'evToipG', 'evAssists', 'ppAssists', 'enGoals', 'ppGoals', 'evGoals', 'blocks', 'hitsPerGame')
         
         return np.array(df)
 
@@ -239,7 +292,7 @@ def extractlagprediction(player, stats4lag, lag ):
 for player in players:
     
     # Start with the first lag
-    interim1 = extractlag(int(player),['points','goals'],1) # create 2D array of a player's performance
+    interim1 = extractlag(int(player),['goals', 'assists', 'plusMinus', 'hitsPerGame', 'blocks'],1) # create 2D array of a player's performance
     np.array(pd.DataFrame(interim1).dropna(inplace=True)) # ignore "empty" rows
     
     if interim1.shape[0] > 0:
@@ -256,7 +309,8 @@ for player in players:
         # contribution have the same shape for each lag.
         interim = np.zeros_like(interim1) - 999 # Identify missing data as -999
 
-        interim2 = extractlag(int(player),['points','goals'],2)
+        interim2 = extractlag(int(player),['goals', 'assists', 'plusMinus',
+                          'hitsPerGame', 'blocks'],2)
         np.array(pd.DataFrame(interim2).dropna(inplace=True))
 
         interim[:interim2.shape[0],:] = interim2
@@ -271,7 +325,8 @@ for player in players:
         # Now the third lag
         interim = np.zeros_like(interim1) - 999
 
-        interim3 = extractlag(int(player), ['points','goals'], 3)
+        interim3 = extractlag(int(player),['goals', 'assists', 'plusMinus',
+                          'hitsPerGame', 'blocks'],3)
         np.array(pd.DataFrame(interim3).dropna(inplace=True))
 
         interim[:interim3.shape[0],:] = interim3
@@ -307,7 +362,7 @@ modelarrayfrom = np.transpose(np.dstack((lagged1,lagged2,lagged3)), (0,2,1))
 for player in players:
     
     # Start with the first lag
-    interim1 = extractlagprediction(int(player),['points','goals'],1) # create 2D array of a player's performance
+    interim1 = extractlagprediction(int(player),['goals', 'assists', 'plusMinus', 'hitsPerGame', 'blocks'],1) # create 2D array of a player's performance
     np.array(pd.DataFrame(interim1).dropna(inplace=True)) # ignore "empty" rows
     
     if interim1.shape[0] > 0:
@@ -324,7 +379,8 @@ for player in players:
         # contribution have the same shape for each lag.
         interim = np.zeros_like(interim1) - 999 # Identify missing data as -999
 
-        interim2 = extractlagprediction(int(player),['points','goals'],2)
+        interim2 = extractlagprediction(int(player),['goals', 'assists', 'plusMinus',
+                          'hitsPerGame', 'blocks'],2)
         np.array(pd.DataFrame(interim2).dropna(inplace=True))
 
         interim[:interim2.shape[0],:] = interim2
@@ -339,7 +395,8 @@ for player in players:
         # Now the third lag
         interim = np.zeros_like(interim1) - 999
 
-        interim3 = extractlagprediction(int(player), ['points','goals'], 3)
+        interim3 = extractlagprediction(int(player),['goals', 'assists', 'plusMinus',
+                          'hitsPerGame', 'blocks'], 3)
         np.array(pd.DataFrame(interim3).dropna(inplace=True))
 
         interim[:interim3.shape[0],:] = interim3
@@ -397,8 +454,8 @@ def modelrun(modelfrom, predictfrom):
     modelfrom[modelfrommask] = -999
     predictfrom[predictfrommask] = -999
     
-    modelfrom_scaled[modelfrommask] = -999
-    predictfrom_scaled[predictfrommask] = -999
+#    modelfrom_scaled[modelfrommask] = -999
+#    predictfrom_scaled[predictfrommask] = -999
     
     
     
@@ -409,13 +466,13 @@ def modelrun(modelfrom, predictfrom):
     # Split into independant and responding variables:
     
     # Split the training data into independant and responding variables:
-    train_ind, train_resp = train[:,:,:-2], train[:,:,-2:]
+    train_ind, train_resp = train[:,:,:-5], train[:,:,-5:]
     
     # Split test data:
-    test_ind, test_resp = test[:,:,:-2], test[:,:,-2:]
+    test_ind, test_resp = test[:,:,:-5], test[:,:,-5:]
     
     # Split prediction data:
-    predictfrom_ind, predictfrom_resp = predictfrom_scaled[:,:,:-2], predictfrom_scaled[:,:,-2:]
+    predictfrom_ind, predictfrom_resp = predictfrom_scaled[:,:,:-5], predictfrom_scaled[:,:,-5:]
     
     #Design and train the LSTM model:
     # Design LSTM neural network
@@ -427,8 +484,9 @@ def modelrun(modelfrom, predictfrom):
     model.add(Masking(mask_value=-999, input_shape=(train_ind.shape[1], train_ind.shape[2])))
     
     # Define as LSTM
-    model.add(LSTM(15, return_sequences=True))
-    model.add(LSTM(5, return_sequences=True))
+    model.add(LSTM(28, return_sequences=True))
+    model.add(LSTM(14, return_sequences=True))
+    model.add(LSTM(7, return_sequences=True))
     
     # I'm not even sure why I need this part, but it doesn't work without it...
     model.add(Dense(predictfrom_resp.shape[2]))
@@ -460,7 +518,7 @@ def modelrun(modelfrom, predictfrom):
     test_predicted[~predictfrommask] = inv_predicted[~predictfrommask]
     
     # Isolate the predicted values
-    inv_predicted_resp = test_predicted[:,:,-2:]
+    inv_predicted_resp = test_predicted[:,:,-5:]
     
     # Return results (predicted responding variables):
     return inv_predicted_resp
@@ -468,7 +526,7 @@ def modelrun(modelfrom, predictfrom):
 
 #%% Run iterations:
 
-numiters = 1
+numiters = 2
 for i in range(numiters):
     print("Working on prediction " + str(i+1) + "/" + str(numiters) + " = " + str(int(i/numiters*100)) + "% complete")
     if i == 0:
