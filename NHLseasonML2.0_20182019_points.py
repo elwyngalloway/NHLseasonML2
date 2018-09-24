@@ -469,9 +469,23 @@ for i in range(numiters):
     else:
         result = np.concatenate((result,np.expand_dims(modelrun(modelarrayfrom, predictarrayfrom), axis=2)),axis=2)
 
-#%% FIGURE OUT WHAT TO SAVE - PROBABLY A NUMPY ARRAY OF ALL PREDICTIONS
+#%% Calculate P10 P50 P90 values for each player prediction
+        
+resultP = np.empty((result.shape[0], 3)) # create a result array [(player),(P10/P50/P90)]
+
+for player in range(result.shape[0]):
+    resultP[player] = [np.percentile(result[player][np.repeat(np.expand_dims(np.ma.masked_greater(predictarrayfrom[player,:,0],-999).mask,axis=1), result.shape[2], axis=1)*np.ma.masked_greater(result[player],2).mask], 10),
+           np.percentile(result[player][np.repeat(np.expand_dims(np.ma.masked_greater(predictarrayfrom[player,:,0],-999).mask,axis=1), result.shape[2], axis=1)*np.ma.masked_greater(result[player],2).mask], 50),
+           np.percentile(result[player][np.repeat(np.expand_dims(np.ma.masked_greater(predictarrayfrom[player,:,0],-999).mask,axis=1), result.shape[2], axis=1)*np.ma.masked_greater(result[player],2).mask], 90)]
 
 
-np.save('20182019_points_L06N06E50B05.npy',result)
+
+#%% Save the results
+
+# to save the full prediction
+#np.save('20182019_points_L06N06E50B05.npy',result)
+    
+# to save the probabilistic summary of the results:
+np.save('20182019_points_P10P50P90_L06N06E50B05.npy',resultP)
 
 
